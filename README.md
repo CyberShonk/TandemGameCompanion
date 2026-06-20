@@ -113,5 +113,4 @@ Known changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
-No public license has been selected. Until a `LICENSE` file is added, this repository should
-not be treated as open-source software.
+Tandem Game Companion is available under the [MIT License](LICENSE).

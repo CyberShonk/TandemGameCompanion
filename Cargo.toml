@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 description = "Portable Windows launcher for starting a game with companion tools"
 repository = "https://github.com/CyberShonk/TandemGameCompanion"
+license = "MIT"
 publish = false
 
 [dependencies]
