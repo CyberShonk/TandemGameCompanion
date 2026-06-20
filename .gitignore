@@ -1,0 +1,26 @@
+# Future Rust build output
+/target/
+
+# Local project context. Never commit this directory.
+/.private/
+
+# Tandem runtime output
+/Tandem.log
+/Tandem.runtime.toml
+/*.runtime.toml
+
+# Local IDE/editor state
+.idea/
+*.swp
+*.swo
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Commit shared Tandem VS Code configuration
+!.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+/Tandem.toml
+/Tandem.dev.toml

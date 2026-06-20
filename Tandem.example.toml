@@ -1,0 +1,32 @@
+config_version = 1
+
+[launcher]
+log_file = "Tandem.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Example Game"
+path = "ExampleGame.exe"
+arguments = []
+working_directory = "."
+
+[[tools]]
+name = "Companion Tool"
+path = "Tools/CompanionTool.exe"
+arguments = []
+working_directory = "Tools"
+launch = "after-game"
+delay_ms = 2000
+required = false
+close_when_game_exits = true
+
+[[tools]]
+name = "Preparation Script"
+path = "Tools/PrepareGame.cmd"
+arguments = []
+working_directory = "Tools"
+launch = "before-game"
+delay_ms = 0
+required = false
+close_when_game_exits = false

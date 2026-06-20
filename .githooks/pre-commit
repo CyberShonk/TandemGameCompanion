@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+
+if grep -Eq '^\.private(/|$)' <<<"$staged"; then
+    echo "ERROR: .private project-context files must never be committed." >&2
+    exit 1
+fi
+
+if grep -Eq '(^|/)(Tandem\.log|Tandem\.runtime\.toml)$|\.runtime\.toml$' <<<"$staged"; then
+    echo "ERROR: runtime logs/state files must never be committed." >&2
+    exit 1
+fi

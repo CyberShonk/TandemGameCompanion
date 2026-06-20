@@ -1,0 +1,56 @@
+name: Continuous integration
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-quality:
+    name: Linux quality checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Repository checks
+        run: ./scripts/check-project.sh
+
+      - name: Formatting
+        run: cargo fmt --check
+
+      - name: Compile
+        run: cargo check --all-targets --all-features
+
+      - name: Unit tests
+        run: cargo test --all-targets --all-features
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  windows-msvc:
+    name: Windows MSVC build and tests
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Unit tests
+        run: cargo test --target x86_64-pc-windows-msvc --all-features
+
+      - name: Release build
+        run: cargo build --release --target x86_64-pc-windows-msvc --all-features

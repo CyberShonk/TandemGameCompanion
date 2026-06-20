@@ -1,0 +1,17 @@
+config_version = 1
+
+[launcher]
+log_file = "Guardian.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Guardian Recovery Game"
+path = "SmokeGame.exe"
+arguments = [
+  "guardian-events.txt",
+  "guardian-game-start",
+  "1500",
+  "guardian-game-end"
+]
+working_directory = "."

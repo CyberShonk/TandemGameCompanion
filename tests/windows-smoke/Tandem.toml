@@ -1,0 +1,51 @@
+config_version = 1
+
+[launcher]
+log_file = "Tandem.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Smoke Test Game"
+path = "SmokeGame.exe"
+arguments = [
+  "smoke-events.txt",
+  "game-start",
+  "3000",
+  "game-end"
+]
+working_directory = "."
+
+[[tools]]
+name = "Before CMD Tool"
+path = "BeforeTool.cmd"
+arguments = []
+working_directory = "."
+launch = "before-game"
+delay_ms = 0
+required = true
+close_when_game_exits = false
+
+[[tools]]
+name = "After BAT Tool"
+path = "AfterTool.bat"
+arguments = []
+working_directory = "."
+launch = "after-game"
+delay_ms = 100
+required = true
+close_when_game_exits = false
+
+[[tools]]
+name = "Companion EXE Tool"
+path = "SmokeTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "exe-tool",
+  "0"
+]
+working_directory = "."
+launch = "after-game"
+delay_ms = 200
+required = true
+close_when_game_exits = false
