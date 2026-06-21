@@ -1,6 +1,6 @@
 # Tests
 
-Rust unit tests are defined beside the code they protect under `src/`.
+Rust unit tests are defined beside the code they protect under `src/`. Unix lifecycle integration tests are in `lifecycle.rs` and cover process ordering, cleanup, exit codes, persistent tools, delayed launches, and guardian isolation.
 
 The `windows-smoke/` directory contains fixtures for the Wine integration test. Generated
 executables, logs, event files, and Wine state are written below `target/` or the configured

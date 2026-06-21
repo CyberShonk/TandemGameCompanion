@@ -36,8 +36,11 @@ echo
 echo "== Windows executable =="
 file "$OUTPUT_EXE"
 
-sha256sum "$OUTPUT_EXE" |
-  tee "$OUTPUT_EXE.sha256"
+(
+  cd "$OUTPUT_DIR"
+  sha256sum "$(basename "$OUTPUT_EXE")" > "$(basename "$OUTPUT_EXE").sha256"
+)
+cat "$OUTPUT_EXE.sha256"
 
 echo
 echo "Windows build created:"

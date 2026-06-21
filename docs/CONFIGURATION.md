@@ -1,11 +1,9 @@
 # Configuration
 
-Tandem reads a human-editable TOML file. The default filename is `Tandem.toml` in the current
-working directory. Use `--config PATH` to select another file.
+Tandem reads a TOML file. The default is `Tandem.toml` in the current working directory; use
+`--config PATH` to select another file. Start with [`../Tandem.example.toml`](../Tandem.example.toml).
 
-Start with [`../Tandem.example.toml`](../Tandem.example.toml).
-
-## Current schema
+## Schema
 
 ```toml
 config_version = 1
@@ -22,92 +20,76 @@ arguments = []
 working_directory = "."
 
 [[tools]]
-name = "Companion Tool"
-path = "Tools/CompanionTool.exe"
+name = "Trainer"
+path = "Tools/Trainer.exe"
 arguments = []
 working_directory = "Tools"
 enabled = true
-launch = "after-game"
-delay_ms = 2000
-required = false
+launch = "before-game"
+before_game_wait = "user-confirmation"
+delay_ms = 0
+required = true
 close_when_game_exits = true
 ```
 
-## Top-level fields
+## Fields
 
-| Field | Required | Meaning |
-|---|---:|---|
-| `config_version` | Yes | Must currently be `1` |
-| `launcher` | No | Launcher-wide behavior; defaults are used when omitted |
-| `game` | Yes | The primary program Tandem supervises |
-| `tools` | No | Zero or more companion programs or scripts |
+| Section | Field | Default | Meaning |
+|---|---|---:|---|
+| top level | `config_version` | required | Must currently be `1` |
+| launcher | `log_file` | `Tandem.log` | Session-log output path |
+| launcher | `allow_external_paths` | `false` | Permits paths outside the configuration folder |
+| launcher | `continue_on_optional_tool_failure` | `true` | Continues after a non-required tool cannot start or, for a waited tool, exits unsuccessfully |
+| game/tool | `name` | required | Label used in output and logs |
+| game/tool | `path` | required | Program or BAT/CMD script path |
+| game/tool | `arguments` | `[]` | Argument array |
+| game/tool | `working_directory` | program parent | Existing child working directory |
+| tool | `enabled` | `true` | Omits the tool when false |
+| tool | `launch` | `after-game` | `before-game` or `after-game` |
+| tool | `before_game_wait` | `none` | `none`, `user-confirmation`, or `tool-exit`; valid only for `before-game` tools |
+| tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
+| tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
+| tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
 
-## Launcher fields
+## Before-game waiting
 
-| Field | Default | Meaning |
-|---|---|---|
-| `log_file` | `Tandem.log` | Session-log output path |
-| `allow_external_paths` | `false` | Allows absolute paths and paths outside the configuration folder |
-| `continue_on_optional_tool_failure` | `true` | Continues when a non-required tool cannot start |
+`before_game_wait = "user-confirmation"` starts the tool and keeps the game stopped while the
+user configures it. On Windows, Tandem displays a foreground, topmost native OK/Cancel dialog.
+OK continues to the game; Cancel fails the session and closes every tool started by that session.
+The tool may remain running while the game runs and is then governed by `close_when_game_exits`.
 
-## Game and tool program fields
+`before_game_wait = "tool-exit"` waits for the tool to finish. A zero exit continues. A nonzero
+exit fails when `required = true` or when optional failures are globally disallowed.
 
-| Field | Required | Meaning |
-|---|---:|---|
-| `name` | Yes | Human-readable label used in output and logs |
-| `path` | Yes | Program or script path |
-| `arguments` | No | Argument array; defaults to empty |
-| `working_directory` | No | Existing folder used as the child process working directory; defaults to the selected file's parent folder |
+`before_game_wait = "none"` preserves the original behavior: start the before-game tool and
+continue immediately.
 
-## Tool-only fields
+After-game delays are polled in short intervals. If the game exits during a delay, Tandem skips
+that tool and all remaining after-game tools.
 
-| Field | Default | Meaning |
-|---|---|---|
-| `enabled` | `true` | Skips the tool when set to `false` |
-| `launch` | `after-game` | Accepts `before-game` or `after-game` |
-| `delay_ms` | `0` | Delay before launch; maximum 600,000 milliseconds |
-| `required` | `false` | Treats launch failure as a session failure |
-| `close_when_game_exits` | `false` | Terminates the directly launched child process after the game exits |
+## Path and file policy
 
-## Path policy
+With `allow_external_paths = false`, paths must remain under the configuration directory.
+Validation rejects absolute/prefixed paths, `..` traversal, and canonical paths that escape
+through symlinks or Windows junctions. Program paths must be files; working directories must be
+directories. The log parent directory must already exist, and the log may not resolve outside
+the portable folder or overwrite the configuration, game, or a configured tool.
 
-With `allow_external_paths = false`, configured paths must remain inside the directory that
-contains the selected configuration file. Validation rejects:
+## BAT and CMD entries
 
-- Absolute paths
-- Windows path prefixes and UNC paths
-- Parent-directory traversal such as `../Tool.exe`
-- Symlink-resolved paths outside the portable folder
-- Attempts to launch the running Tandem executable recursively
+Windows builds invoke BAT/CMD entries through a fixed `cmd.exe /D /S /C call ...` command.
+Arguments are supported and preserved. Tandem rejects double quotes, shell operators,
+expansion characters, control characters, and other unsafe metacharacters in script paths or
+arguments rather than exposing a free-form shell command.
 
-The selected game, tools, and working directories must already exist. The log file itself may
-be created when the session starts.
+## Limits and validation
 
-## Windows entry types
-
-Windows builds accept these extensions:
-
-- `.exe`
-- `.com`
-- `.bat`
-- `.cmd`
-
-BAT and CMD entries are invoked through `cmd.exe`. Custom arguments for scripts are currently
-rejected, and script paths containing command-shell metacharacters are rejected.
-
-## Limits
-
-- Maximum configured tools: 32
-- Maximum combined argument text per program: 16 KiB
-- Maximum tool delay: 10 minutes
-- Supported configuration version: 1
-
-## Validation commands
+- 32 configured tools
+- 16 KiB combined argument text per program
+- 10-minute maximum tool delay
+- Configuration version `1`
 
 ```text
 TandemGameCompanion.exe --validate
 TandemGameCompanion.exe --dry-run
 ```
-
-`--dry-run` resolves and prints canonical paths. Review its output before sharing logs because
-those paths may identify local folders.

@@ -94,6 +94,27 @@ launch = "after-game"
 
 Starts the tool after the game launches.
 
+For a trainer that must be configured before the game, add:
+
+```toml
+launch = "before-game"
+before_game_wait = "user-confirmation"
+required = true
+close_when_game_exits = true
+```
+
+Tandem launches the trainer, shows a native OK/Cancel prompt, and starts the game only after OK.
+
+For a one-shot setup utility, use:
+
+```toml
+launch = "before-game"
+before_game_wait = "tool-exit"
+required = true
+```
+
+Tandem waits for the utility and stops if it exits unsuccessfully.
+
 You can also add a delay before launching a tool:
 
 ```toml
@@ -163,7 +184,7 @@ Currently supported:
 - `.bat`
 - `.cmd`
 
-Custom arguments for BAT and CMD scripts aren't supported yet in this alpha.
+BAT and CMD arguments are supported when they contain no shell metacharacters. Tandem rejects unsafe script paths or arguments instead of accepting free-form command text.
 
 ## 6. Set up GameNative
 
@@ -258,7 +279,7 @@ Not included yet:
 
 - Graphical setup interface
 - File picker dialogs
-- Controller navigation
+- A full controller-driven setup interface (the before-game confirmation uses a standard Windows dialog)
 - Notifications
 - Silent/background operation
 - Automatic config generation

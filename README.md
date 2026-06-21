@@ -18,10 +18,11 @@ or other local helper launched alongside it.
 - Launches local EXE and COM programs.
 - Launches explicitly configured BAT and CMD scripts through `cmd.exe` on Windows.
 - Starts tools before or after the game with optional delays.
+- Can pause before game launch for a native user confirmation or until a setup tool exits.
 - Allows optional tool failures without blocking the game.
 - Waits for the configured game process to exit.
 - Optionally terminates directly launched tools when the game exits.
-- Writes a per-session log.
+- Writes a per-session log and redirects child stdout/stderr away from guardian control messages.
 - Uses a guardian/worker process model so the outer process remains alive if the worker
   fails after reporting the game process.
 - Supports configuration validation and launch-plan previews without starting programs.
@@ -30,10 +31,10 @@ or other local helper launched alongside it.
 
 - Configuration is edited manually; there is no graphical setup interface.
 - Normal launches use a visible console window.
-- There are no desktop notifications or controller-driven configuration controls.
-- Worker recovery does not restart the worker or restore tool cleanup.
+- There is no graphical setup editor or general controller-driven configuration interface.
+- Worker recovery does not restart the worker or restore tool cleanup after a worker crash.
 - Tool cleanup targets the directly launched process, not an entire descendant process tree.
-- BAT and CMD entries do not accept custom arguments yet.
+- BAT/CMD arguments are limited to values that are safe for Tandem's fixed `cmd.exe` invocation.
 - Native Windows, GameNative, and Winlator coverage is still limited.
 
 See [`docs/GUARDIAN_WORKER.md`](docs/GUARDIAN_WORKER.md) for the current supervision boundary.

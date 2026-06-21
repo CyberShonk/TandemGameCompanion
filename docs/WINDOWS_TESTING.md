@@ -1,57 +1,21 @@
 # Windows build and smoke testing
 
-Tandem is developed on Linux but targets Windows and Wine-compatible environments.
-
-## Prerequisites
-
-The development container requires:
-
-- Rust stable through `rustup`
-- `cargo-xwin`
-- Clang and LLD
-- Wine
-- MinGW-w64 GCC
-- `file`
-- `sha256sum`
-
-Install the Rust target and `cargo-xwin`:
+Prerequisites: Rust, `cargo-xwin`, Clang/LLD, Wine, MinGW-w64 GCC, `file`, and `sha256sum`.
 
 ```bash
-rustup target add x86_64-pc-windows-msvc
 cargo install --locked cargo-xwin
-```
-
-## Build a Windows release executable
-
-```bash
 ./scripts/build-windows.sh
-```
-
-Output:
-
-```text
-target/windows-release/TandemGameCompanion.exe
-target/windows-release/TandemGameCompanion.exe.sha256
-```
-
-## Run the complete Windows smoke test
-
-```bash
 ./scripts/test-windows.sh
 ```
 
-The script:
+The build produces `target/windows-release/TandemGameCompanion.exe` and a checksum file whose
+record contains only `TandemGameCompanion.exe`, so it is portable between machines.
 
-1. Runs Windows-target Rust tests through Wine.
-2. Builds the release executable.
-3. Creates or reuses an isolated Wine prefix.
-4. Compiles a minimal Windows helper program.
-5. Tests EXE, BAT, and CMD launch paths.
-6. Confirms Tandem stays alive until the mock game exits.
-7. Verifies expected events and exit statuses.
+The Wine smoke test runs Windows-target tests, builds the release executable, exercises EXE,
+BAT, and CMD paths (including script arguments), verifies launch order and status logging, and
+checks that a simulated worker failure leaves the guardian active until the game exits while
+returning a nonzero status.
 
-Override the Wine prefix when needed:
-
-```bash
-WINEPREFIX="$HOME/path/to/another-prefix" ./scripts/test-windows.sh
-```
+Manual Windows/GameNative checks must additionally cover the native user-confirmation dialog,
+touch/controller focus mapping, Cancel cleanup, a persistent tool, and a full-screen or native-
+rendering game obscuring secondary windows after launch.

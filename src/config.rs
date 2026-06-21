@@ -59,6 +59,8 @@ pub struct ToolConfig {
     #[serde(default)]
     pub launch: LaunchTiming,
     #[serde(default)]
+    pub before_game_wait: BeforeGameWait,
+    #[serde(default)]
     pub delay_ms: u64,
     #[serde(default)]
     pub required: bool,
@@ -72,6 +74,15 @@ pub enum LaunchTiming {
     BeforeGame,
     #[default]
     AfterGame,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum BeforeGameWait {
+    #[default]
+    None,
+    UserConfirmation,
+    ToolExit,
 }
 
 #[derive(Debug)]
@@ -95,9 +106,16 @@ pub struct ResolvedProgram {
 pub struct ResolvedTool {
     pub program: ResolvedProgram,
     pub launch: LaunchTiming,
+    pub before_game_wait: BeforeGameWait,
     pub delay_ms: u64,
     pub required: bool,
     pub close_when_game_exits: bool,
+}
+
+#[derive(Clone, Copy)]
+enum ExistingPathKind {
+    File,
+    Directory,
 }
 
 pub fn load_and_resolve(path: &Path) -> Result<ResolvedConfig, AppError> {
@@ -161,6 +179,14 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
             ));
         }
 
+        if tool.before_game_wait != BeforeGameWait::None && tool.launch != LaunchTiming::BeforeGame
+        {
+            problems.push(format!(
+                "tool {} before_game_wait requires launch = \"before-game\"",
+                tool.name
+            ));
+        }
+
         let label = format!("tool {} ({})", index + 1, tool.name);
         if let Some(program) = resolve_program(
             &label,
@@ -174,21 +200,10 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
             config.launcher.allow_external_paths,
             &mut problems,
         ) {
-            if is_windows_script(&program.path) && !program.arguments.is_empty() {
-                problems.push(format!(
-                    "{label} uses BAT/CMD arguments, which are intentionally unsupported in the first MVP"
-                ));
-            }
-
-            if is_windows_script(&program.path) && contains_cmd_metacharacters(&program.path) {
-                problems.push(format!(
-                    "{label} path contains characters that are unsafe to pass through cmd.exe"
-                ));
-            }
-
             tools.push(ResolvedTool {
                 program,
                 launch: tool.launch,
+                before_game_wait: tool.before_game_wait,
                 delay_ms: tool.delay_ms,
                 required: tool.required,
                 close_when_game_exits: tool.close_when_game_exits,
@@ -204,15 +219,46 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
         &mut problems,
     );
 
+    if let Some(log_file) = &log_file {
+        if log_file == &config_path {
+            problems.push("launcher.log_file may not overwrite the configuration file".into());
+        }
+        if game
+            .as_ref()
+            .is_some_and(|program| &program.path == log_file)
+        {
+            problems.push("launcher.log_file may not overwrite the game executable".into());
+        }
+        for tool in &tools {
+            if &tool.program.path == log_file {
+                problems.push(format!(
+                    "launcher.log_file may not overwrite companion tool {}",
+                    tool.program.name
+                ));
+            }
+        }
+    }
+
     if !problems.is_empty() {
         return Err(AppError::InvalidConfig(problems));
     }
 
+    let Some(log_file) = log_file else {
+        return Err(AppError::runtime(
+            "validated configuration did not produce a log path",
+        ));
+    };
+    let Some(game) = game else {
+        return Err(AppError::runtime(
+            "validated configuration did not produce a game program",
+        ));
+    };
+
     Ok(ResolvedConfig {
         config_path,
-        log_file: log_file.expect("validated log path must exist"),
+        log_file,
         continue_on_optional_tool_failure: config.launcher.continue_on_optional_tool_failure,
-        game: game.expect("validated game must exist"),
+        game,
         tools,
     })
 }
@@ -239,6 +285,7 @@ fn resolve_program(
         &program.path,
         config_directory,
         allow_external_paths,
+        ExistingPathKind::File,
         problems,
     )?;
 
@@ -249,26 +296,28 @@ fn resolve_program(
     #[cfg(windows)]
     validate_windows_extension(label, &path, problems);
 
+    validate_script_invocation(label, &path, &program.arguments, problems);
+
     let working_directory = match &program.working_directory {
         Some(directory) => resolve_existing_path(
             &format!("{label}.working_directory"),
             directory,
             config_directory,
             allow_external_paths,
+            ExistingPathKind::Directory,
             problems,
         )?,
-        None => path
-            .parent()
-            .expect("resolved executable path must have a parent")
-            .to_path_buf(),
+        None => match path.parent() {
+            Some(parent) => parent.to_path_buf(),
+            None => {
+                problems.push(format!(
+                    "{label} executable has no parent folder: {}",
+                    path.display()
+                ));
+                return None;
+            }
+        },
     };
-
-    if !working_directory.is_dir() {
-        problems.push(format!(
-            "{label} working directory is not a folder: {}",
-            working_directory.display()
-        ));
-    }
 
     Some(ResolvedProgram {
         name: program.name.clone(),
@@ -283,6 +332,7 @@ fn resolve_existing_path(
     configured_path: &Path,
     config_directory: &Path,
     allow_external_paths: bool,
+    kind: ExistingPathKind,
     problems: &mut Vec<String>,
 ) -> Option<PathBuf> {
     if configured_path.as_os_str().is_empty() {
@@ -314,23 +364,29 @@ fn resolve_existing_path(
         }
     };
 
-    if !allow_external_paths {
-        let canonical_root = match fs::canonicalize(config_directory) {
-            Ok(root) => root,
-            Err(source) => {
-                problems.push(format!(
-                    "configuration folder could not be resolved: {source}"
-                ));
-                return None;
-            }
-        };
+    if !allow_external_paths
+        && !path_is_inside_portable_root(&canonical, config_directory, problems)
+    {
+        problems.push(format!(
+            "{label} resolves outside the portable Tandem folder"
+        ));
+        return None;
+    }
 
-        if !canonical.starts_with(&canonical_root) {
-            problems.push(format!(
-                "{label} resolves outside the portable Tandem folder"
-            ));
-            return None;
-        }
+    let correct_kind = match kind {
+        ExistingPathKind::File => canonical.is_file(),
+        ExistingPathKind::Directory => canonical.is_dir(),
+    };
+    if !correct_kind {
+        let expected = match kind {
+            ExistingPathKind::File => "a file",
+            ExistingPathKind::Directory => "a folder",
+        };
+        problems.push(format!(
+            "{label} is not {expected}: {}",
+            canonical.display()
+        ));
+        return None;
     }
 
     Some(canonical)
@@ -355,11 +411,125 @@ fn resolve_output_path(
         return None;
     }
 
-    Some(if configured_path.is_absolute() {
+    let joined = if configured_path.is_absolute() {
         configured_path.to_path_buf()
     } else {
         config_directory.join(configured_path)
-    })
+    };
+
+    let Some(file_name) = joined.file_name() else {
+        problems.push(format!("{label} must name a file"));
+        return None;
+    };
+    let Some(parent) = joined.parent() else {
+        problems.push(format!("{label} has no parent folder"));
+        return None;
+    };
+
+    let canonical_parent = match fs::canonicalize(parent) {
+        Ok(path) => path,
+        Err(source) => {
+            problems.push(format!(
+                "{label} parent folder could not be resolved ({}): {source}",
+                parent.display()
+            ));
+            return None;
+        }
+    };
+
+    if !canonical_parent.is_dir() {
+        problems.push(format!(
+            "{label} parent path is not a folder: {}",
+            canonical_parent.display()
+        ));
+        return None;
+    }
+
+    if !allow_external_paths
+        && !path_is_inside_portable_root(&canonical_parent, config_directory, problems)
+    {
+        problems.push(format!(
+            "{label} resolves outside the portable Tandem folder"
+        ));
+        return None;
+    }
+
+    let resolved = canonical_parent.join(file_name);
+    if fs::symlink_metadata(&resolved).is_ok() {
+        let canonical_target = match fs::canonicalize(&resolved) {
+            Ok(path) => path,
+            Err(source) => {
+                problems.push(format!(
+                    "{label} could not be resolved ({}): {source}",
+                    resolved.display()
+                ));
+                return None;
+            }
+        };
+
+        if canonical_target.is_dir() {
+            problems.push(format!(
+                "{label} points to a folder, not a file: {}",
+                canonical_target.display()
+            ));
+            return None;
+        }
+
+        if !allow_external_paths
+            && !path_is_inside_portable_root(&canonical_target, config_directory, problems)
+        {
+            problems.push(format!(
+                "{label} resolves outside the portable Tandem folder"
+            ));
+            return None;
+        }
+
+        return Some(canonical_target);
+    }
+
+    Some(resolved)
+}
+
+fn path_is_inside_portable_root(
+    path: &Path,
+    config_directory: &Path,
+    problems: &mut Vec<String>,
+) -> bool {
+    match fs::canonicalize(config_directory) {
+        Ok(root) => path.starts_with(root),
+        Err(source) => {
+            problems.push(format!(
+                "configuration folder could not be resolved: {source}"
+            ));
+            false
+        }
+    }
+}
+
+fn validate_script_invocation(
+    label: &str,
+    path: &Path,
+    arguments: &[String],
+    problems: &mut Vec<String>,
+) {
+    if !is_windows_script(path) {
+        return;
+    }
+
+    if contains_cmd_metacharacters(&path.to_string_lossy()) {
+        problems.push(format!(
+            "{label} path contains characters that are unsafe to pass through cmd.exe"
+        ));
+    }
+
+    for (index, argument) in arguments.iter().enumerate() {
+        if contains_cmd_metacharacters(argument) {
+            problems.push(format!(
+                "{label} argument {} contains characters that are unsafe to pass through cmd.exe",
+                index + 1
+            ));
+        }
+    }
 }
 
 fn is_external_syntax(path: &Path) -> bool {
@@ -370,7 +540,7 @@ fn is_external_syntax(path: &Path) -> bool {
 }
 
 fn argument_bytes(arguments: &[String]) -> usize {
-    arguments.iter().map(String::len).sum()
+    arguments.iter().map(|argument| argument.len()).sum()
 }
 
 fn current_executable() -> PathBuf {
@@ -387,11 +557,11 @@ pub fn is_windows_script(path: &Path) -> bool {
         })
 }
 
-fn contains_cmd_metacharacters(path: &Path) -> bool {
-    path.to_string_lossy().chars().any(|character| {
+fn contains_cmd_metacharacters(value: &str) -> bool {
+    value.chars().any(|character| {
         matches!(
             character,
-            '"' | '&' | '|' | '<' | '>' | '^' | '%' | '!' | '\r' | '\n'
+            '"' | '&' | '|' | '<' | '>' | '^' | '%' | '!' | '\r' | '\n' | '\0'
         )
     })
 }
@@ -420,8 +590,26 @@ fn default_true() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, LaunchTiming, is_external_syntax};
-    use std::path::Path;
+    use super::{
+        BeforeGameWait, Config, LaunchTiming, contains_cmd_metacharacters, is_external_syntax,
+        load_and_resolve,
+    };
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_directory(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after the epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "tandem-config-{name}-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("test directory should be created");
+        path
+    }
 
     #[test]
     fn parses_minimal_configuration() {
@@ -442,7 +630,7 @@ path = "Game.exe"
     }
 
     #[test]
-    fn tools_default_to_after_game() {
+    fn tools_default_to_after_game_without_a_wait() {
         let config: Config = toml::from_str(
             r#"
 config_version = 1
@@ -459,12 +647,166 @@ path = "Trainer.exe"
         .expect("tool configuration should parse");
 
         assert_eq!(config.tools[0].launch, LaunchTiming::AfterGame);
+        assert_eq!(config.tools[0].before_game_wait, BeforeGameWait::None);
         assert!(config.tools[0].enabled);
+    }
+
+    #[test]
+    fn parses_before_game_wait_modes() {
+        let config: Config = toml::from_str(
+            r#"
+config_version = 1
+
+[game]
+name = "Demo Game"
+path = "Game.exe"
+
+[[tools]]
+name = "Trainer"
+path = "Trainer.exe"
+launch = "before-game"
+before_game_wait = "user-confirmation"
+
+[[tools]]
+name = "Setup"
+path = "Setup.exe"
+launch = "before-game"
+before_game_wait = "tool-exit"
+"#,
+        )
+        .expect("wait modes should parse");
+
+        assert_eq!(
+            config.tools[0].before_game_wait,
+            BeforeGameWait::UserConfirmation
+        );
+        assert_eq!(config.tools[1].before_game_wait, BeforeGameWait::ToolExit);
     }
 
     #[test]
     fn parent_paths_are_external_syntax() {
         assert!(is_external_syntax(Path::new("../Tool.exe")));
         assert!(!is_external_syntax(Path::new("Tools/Tool.exe")));
+    }
+
+    #[test]
+    fn command_metacharacter_validation_allows_plain_arguments() {
+        assert!(!contains_cmd_metacharacters("--profile"));
+        assert!(!contains_cmd_metacharacters("Low latency mode"));
+        assert!(contains_cmd_metacharacters("safe & whoami"));
+        assert!(contains_cmd_metacharacters("%PATH%"));
+    }
+
+    #[test]
+    fn rejects_a_directory_as_a_program() {
+        let root = test_directory("directory-program");
+        fs::create_dir(root.join("Game.exe")).expect("fake program directory should be created");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            "config_version = 1\n[game]\nname = \"Game\"\npath = \"Game.exe\"\n",
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("directory must not validate as a file");
+        assert!(error.to_string().contains("is not a file"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_wait_modes_on_after_game_tools() {
+        let root = test_directory("after-game-wait");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "after-game"
+before_game_wait = "tool-exit"
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("invalid wait mode should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("requires launch = \"before-game\"")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_a_log_path_that_would_overwrite_the_game() {
+        let root = test_directory("log-overwrites-game");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            "config_version = 1\n[launcher]\nlog_file = \"Game\"\n[game]\nname = \"Game\"\npath = \"Game\"\n",
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("log must not overwrite the game");
+        assert!(
+            error
+                .to_string()
+                .contains("may not overwrite the game executable")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_dangling_log_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_directory("dangling-log-symlink");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        symlink(root.join("missing-target"), root.join("Tandem.log"))
+            .expect("dangling log symlink should be created");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            "config_version = 1\n[game]\nname = \"Game\"\npath = \"Game\"\n",
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("dangling log link must be rejected");
+        assert!(error.to_string().contains("could not be resolved"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_log_file_symlink_that_escapes_the_portable_folder() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_directory("log-symlink");
+        let outside = test_directory("log-outside");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        symlink(&outside, root.join("logs")).expect("log symlink should be created");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            "config_version = 1\n[launcher]\nlog_file = \"logs/Tandem.log\"\n[game]\nname = \"Game\"\npath = \"Game\"\n",
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("escaping log path should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("resolves outside the portable Tandem folder")
+        );
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
     }
 }
