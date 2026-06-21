@@ -12,11 +12,12 @@ arguments = []
 working_directory = "."
 
 [[tools]]
-name = "Companion Tool"
-path = "Tools/CompanionTool.exe"
+name = "Trainer"
+path = "Tools/Trainer.exe"
 arguments = []
 working_directory = "Tools"
-launch = "after-game"
-delay_ms = 2000
-required = false
+launch = "before-game"
+before_game_wait = "user-confirmation"
+delay_ms = 0
+required = true
 close_when_game_exits = true

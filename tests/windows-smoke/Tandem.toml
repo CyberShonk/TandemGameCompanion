@@ -19,9 +19,10 @@ working_directory = "."
 [[tools]]
 name = "Before CMD Tool"
 path = "BeforeTool.cmd"
-arguments = []
+arguments = ["before-cmd-arg"]
 working_directory = "."
 launch = "before-game"
+before_game_wait = "tool-exit"
 delay_ms = 0
 required = true
 close_when_game_exits = false
@@ -29,7 +30,7 @@ close_when_game_exits = false
 [[tools]]
 name = "After BAT Tool"
 path = "AfterTool.bat"
-arguments = []
+arguments = ["after-bat-arg"]
 working_directory = "."
 launch = "after-game"
 delay_ms = 100

@@ -11,6 +11,31 @@ path = "ExampleGame.exe"
 arguments = []
 working_directory = "."
 
+# Start a trainer, let the user configure it, then show a native confirmation dialog.
+[[tools]]
+name = "Trainer"
+path = "Tools/Trainer.exe"
+arguments = []
+working_directory = "Tools"
+launch = "before-game"
+before_game_wait = "user-confirmation"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+# Run a one-shot setup utility and launch the game only after it exits successfully.
+[[tools]]
+name = "Setup Utility"
+path = "Tools/Setup.exe"
+arguments = []
+working_directory = "Tools"
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 0
+required = true
+close_when_game_exits = false
+
+# Launch an ordinary companion after the game starts.
 [[tools]]
 name = "Companion Tool"
 path = "Tools/CompanionTool.exe"
@@ -20,13 +45,3 @@ launch = "after-game"
 delay_ms = 2000
 required = false
 close_when_game_exits = true
-
-[[tools]]
-name = "Preparation Script"
-path = "Tools/PrepareGame.cmd"
-arguments = []
-working_directory = "Tools"
-launch = "before-game"
-delay_ms = 0
-required = false
-close_when_game_exits = false

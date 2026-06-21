@@ -94,9 +94,9 @@ echo "== Recorded events =="
 cat smoke-events.normalized.txt
 
 expected_events=(
-  "before-cmd"
+  "before-cmd:before-cmd-arg"
   "game-start"
-  "after-bat"
+  "after-bat:after-bat-arg"
   "exe-tool"
   "game-end"
 )
@@ -125,7 +125,7 @@ if ! grep -Fq "Game exited with status: exit code: 0" Tandem.log; then
   exit 1
 fi
 
-if ! grep -Fq "Before CMD Tool already exited with status: exit code: 0" Tandem.log; then
+if ! grep -Fq "Before CMD Tool exited before game launch with status: exit code: 0" Tandem.log; then
   echo "Before CMD Tool did not exit successfully according to Tandem.log." >&2
   exit 1
 fi
@@ -145,8 +145,16 @@ echo
 echo "== Guardian recovery smoke test =="
 rm -f Guardian.log guardian-events.txt guardian-events.normalized.txt
 
+set +e
 TANDEM_TEST_WORKER_EXIT_AFTER_GAME_START=1 \
 wine ./TandemGameCompanion.exe --config Guardian.toml
+guardian_status=$?
+set -e
+
+if [[ "$guardian_status" -ne 1 ]]; then
+  echo "Guardian recovery test returned $guardian_status instead of 1." >&2
+  exit 1
+fi
 
 if [[ ! -f guardian-events.txt ]]; then
   echo "Guardian recovery test did not create guardian-events.txt." >&2

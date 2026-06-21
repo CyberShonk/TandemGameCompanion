@@ -8,11 +8,11 @@ The test covers:
 - Windows-target unit tests.
 - EXE game launching.
 - EXE companion-tool launching.
-- BAT and CMD companion-tool launching.
+- BAT and CMD companion-tool launching with validated arguments.
 - Paths containing spaces.
 - Tandem remaining alive until the game exits.
 - Successful child-process exit statuses.
-- Guardian lifetime after a simulated worker failure.
+- Guardian lifetime and nonzero exit preservation after a simulated worker failure.
 
 Run the complete test from the repository root:
 
