@@ -3,6 +3,11 @@
 Tandem reads a TOML file. The default is `Tandem.toml` in the current working directory; use
 `--config PATH` to select another file. Start with [`../Tandem.example.toml`](../Tandem.example.toml).
 
+## Configuration compatibility
+
+The configuration schema remains version `1`. Configurations created for `v0.1.0-alpha`
+continue to work unchanged because `before_game_wait` defaults to `none` when omitted.
+
 ## Schema
 
 ```toml
@@ -56,7 +61,12 @@ close_when_game_exits = true
 `before_game_wait = "user-confirmation"` starts the tool and keeps the game stopped while the
 user configures it. On Windows, Tandem displays a foreground, topmost native OK/Cancel dialog.
 OK continues to the game; Cancel fails the session and closes every tool started by that session.
-The tool may remain running while the game runs and is then governed by `close_when_game_exits`.
+If the tool exits before confirmation completes, its exit status is evaluated using `required`
+and `continue_on_optional_tool_failure`. A tool that remains open is governed by
+`close_when_game_exits` after the game starts.
+
+This workflow does not rely on the trainer remaining visible after game launch. Fullscreen,
+native-rendering, or direct-scanout modes may cover or bypass secondary Windows windows.
 
 `before_game_wait = "tool-exit"` waits for the tool to finish. A zero exit continues. A nonzero
 exit fails when `required = true` or when optional failures are globally disallowed.

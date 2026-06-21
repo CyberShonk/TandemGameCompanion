@@ -29,9 +29,9 @@ or other local helper launched alongside it.
 
 ## Current limitations
 
-- Configuration is edited manually; there is no graphical setup interface.
+- Configuration is edited manually; there is no graphical setup editor.
 - Normal launches use a visible console window.
-- There is no graphical setup editor or general controller-driven configuration interface.
+- General controller-driven configuration is not implemented.
 - Worker recovery does not restart the worker or restore tool cleanup after a worker crash.
 - Tool cleanup targets the directly launched process, not an entire descendant process tree.
 - BAT/CMD arguments are limited to values that are safe for Tandem's fixed `cmd.exe` invocation.
@@ -49,6 +49,45 @@ See [`docs/GUARDIAN_WORKER.md`](docs/GUARDIAN_WORKER.md) for the current supervi
 
 Start with [`Tandem.example.toml`](Tandem.example.toml) and read the complete
 [configuration reference](docs/CONFIGURATION.md).
+
+Existing `v0.1.0-alpha` configurations remain valid. The new `before_game_wait` field defaults
+to `none` when omitted.
+
+### Before-game setup workflows
+
+Use user confirmation when a trainer must remain open while the user changes settings:
+
+```toml
+[[tools]]
+name = "Trainer"
+path = "Tools/Trainer.exe"
+launch = "before-game"
+before_game_wait = "user-confirmation"
+required = true
+close_when_game_exits = true
+```
+
+Tandem starts the trainer, keeps the game stopped, and displays a native OK/Cancel prompt.
+The game starts only after OK. Cancel or a later game-launch failure cleans up tools already
+started by the session.
+
+Use tool-exit waiting for a one-shot setup utility:
+
+```toml
+[[tools]]
+name = "Setup Utility"
+path = "Tools/Setup.exe"
+launch = "before-game"
+before_game_wait = "tool-exit"
+required = true
+```
+
+Tandem waits for the utility to exit. A required nonzero exit prevents game launch and is
+returned as a nonzero Tandem exit status.
+
+The confirmation workflow is intentionally completed before the game starts. Fullscreen,
+native-rendering, or direct-scanout modes may obscure secondary Windows windows after launch,
+so Tandem does not depend on the trainer remaining visible over the game.
 
 ### Command-line options
 

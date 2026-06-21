@@ -104,6 +104,11 @@ close_when_game_exits = true
 ```
 
 Tandem launches the trainer, shows a native OK/Cancel prompt, and starts the game only after OK.
+Cancel prevents game launch and closes tools already started by the session.
+
+The prompt is completed before the game starts. Fullscreen or native-rendering modes may cover
+the trainer after launch, so this workflow does not require the trainer to remain visible over
+the game.
 
 For a one-shot setup utility, use:
 
@@ -145,7 +150,8 @@ required = true
 
 If the tool fails, Tandem treats the whole launch as a failure.
 
-For most trainer testing, `false` is probably the better choice.
+Use `required = true` when the game should not start without the trainer or setup utility. Use
+`false` only when the game can still run normally without that tool.
 
 ```toml
 close_when_game_exits = true
@@ -207,6 +213,9 @@ the original game executable
 Leave executable arguments empty unless you're specifically testing something.
 
 Don't point GameNative directly at the game executable. Let Tandem handle launching the game.
+
+The user-confirmation prompt is a standard Windows dialog. Touch should work directly; controller
+use depends on the container's controller-to-pointer or keyboard mapping.
 
 ## 7. Launch the game
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
-VERSION="${1:-0.1.0-alpha}"
+VERSION="${1:-0.2.0-alpha}"
 PACKAGE_NAME="Tandem-Game-Companion-v${VERSION}"
 DIST_DIR="$ROOT_DIR/target/dist"
 PACKAGE_DIR="$DIST_DIR/$PACKAGE_NAME"
