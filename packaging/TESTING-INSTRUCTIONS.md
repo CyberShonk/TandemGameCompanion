@@ -1,16 +1,22 @@
-# Tandem Game Companion — Alpha Testing Guide
+# Tandem Game Companion Alpha Testing Guide
 
-This is a very early alpha build, so things are still pretty manual. Right now you'll need to edit a configuration file yourself, and there isn't a graphical setup screen yet.
+Tandem is early alpha software. Setup is currently manual: edit `Tandem.toml`, launch Tandem instead
+of the game executable, and use `Tandem.log` when reporting a problem.
 
-## What you'll need
+> [!WARNING]
+> Only launch games, trainers, scripts, and utilities you trust. Tandem runs them with the current
+> user's permissions.
 
-- A Windows x64 game
-- Any trainer or companion tool you want to launch
-- A text editor
+## What you need
 
-## 1. Put Tandem in your game folder
+- a Windows x64 game;
+- a trainer, controller utility, setup program, or other companion tool;
+- a text editor; and
+- native Windows, GameNative, Winlator, Wine, or another compatible Windows environment.
 
-Place these files next to your game's executable:
+## 1. Prepare the game folder
+
+Place the package beside the game executable:
 
 ```text
 GameFolder/
@@ -21,15 +27,12 @@ GameFolder/
     └── CompanionTool.exe
 ```
 
-Keeping everything together makes the setup easier and more portable.
+Keeping the files together makes the setup easier to review and move. Do not rename or replace the
+original game executable.
 
-Don't rename or replace the original game executable.
+## 2. Configure the game
 
-## 2. Edit `Tandem.toml`
-
-Open `Tandem.toml` in your favorite text editor.
-
-Example configuration:
+Open `Tandem.toml` and update the game entry:
 
 ```toml
 config_version = 1
@@ -44,7 +47,13 @@ name = "Example Game"
 path = "ExampleGame.exe"
 arguments = []
 working_directory = "."
+```
 
+Change `ExampleGame.exe` to the actual executable filename. Use forward slashes for portable paths.
+
+## 3. Add a normal companion tool
+
+```toml
 [[tools]]
 name = "Companion Tool"
 path = "Tools/CompanionTool.exe"
@@ -56,185 +65,149 @@ required = false
 close_when_game_exits = true
 ```
 
-Change:
+This launches the tool two seconds after the game starts.
+
+## 4. Configure a trainer before game startup
+
+Use this when a trainer must be opened and adjusted before the game launches:
 
 ```toml
-path = "ExampleGame.exe"
-```
-
-to match your actual game executable.
-
-Change:
-
-```toml
-path = "Tools/CompanionTool.exe"
-```
-
-to match the trainer or tool you want to launch.
-
-Use forward slashes in paths:
-
-```toml
-path = "Tools/MyTrainer.exe"
-```
-
-## 3. Choose when tools launch
-
-You can launch a tool before or after the game starts.
-
-```toml
-launch = "before-game"
-```
-
-Starts the tool first.
-
-```toml
-launch = "after-game"
-```
-
-Starts the tool after the game launches.
-
-For a trainer that must be configured before the game, add:
-
-```toml
+[[tools]]
+name = "Trainer"
+path = "Tools/Trainer.exe"
+arguments = []
+working_directory = "Tools"
 launch = "before-game"
 before_game_wait = "user-confirmation"
+delay_ms = 0
 required = true
 close_when_game_exits = true
 ```
 
-Tandem launches the trainer, shows a native OK/Cancel prompt, and starts the game only after OK.
+Expected behavior:
 
-For a one-shot setup utility, use:
+1. Tandem launches the trainer.
+2. The game remains stopped.
+3. Tandem displays a native Windows OK/Cancel prompt.
+4. Select **OK** after configuring the trainer.
+5. Tandem launches the game.
+6. Selecting **Cancel** prevents game launch and closes tools already started by the session.
+
+The prompt is completed before the game starts. Fullscreen or native-rendering modes may cover the
+trainer after launch, so this workflow does not require it to remain visible over the game.
+
+Touch should work through normal compatibility-environment input. Controller use depends on the
+environment's controller-to-pointer or keyboard mapping.
+
+## 5. Wait for a setup utility
+
+Use this for a one-shot program that must finish before the game starts:
 
 ```toml
+[[tools]]
+name = "Setup Utility"
+path = "Tools/Setup.exe"
+arguments = []
+working_directory = "Tools"
 launch = "before-game"
 before_game_wait = "tool-exit"
+delay_ms = 0
 required = true
+close_when_game_exits = false
 ```
 
-Tandem waits for the utility and stops if it exits unsuccessfully.
+Tandem waits for the utility. Exit code `0` continues to the game. A required nonzero exit stops the
+session and is returned by Tandem.
 
-You can also add a delay before launching a tool:
+## 6. Choose tool behavior
 
-```toml
-delay_ms = 2000
-```
-
-That's 2 seconds.
-
-Some trainers need a little more time:
-
-```toml
-delay_ms = 5000
-```
-
-That's 5 seconds.
-
-## 4. Tool behavior
+### Required or optional
 
 ```toml
 required = false
 ```
 
-If the tool fails to start, the game will still launch.
+The game may still launch if the tool fails and optional failures are enabled.
 
 ```toml
 required = true
 ```
 
-If the tool fails, Tandem treats the whole launch as a failure.
+The session fails if the tool cannot start. A waited setup utility must also return exit code `0`.
+Use this when the game should not start without the tool.
 
-For most trainer testing, `false` is probably the better choice.
+### Close with the game
 
 ```toml
 close_when_game_exits = true
 ```
 
-Tandem will try to close the tool when the game closes.
+Tandem attempts to terminate the direct process it started when the game exits.
 
 ```toml
 close_when_game_exits = false
 ```
 
-The tool will stay running after the game exits.
+The tool may remain running after a successful session.
 
-## 5. Adding more tools
-
-Want to launch multiple tools? Just add another `[[tools]]` section.
-
-Example:
+### Delay a tool
 
 ```toml
-[[tools]]
-name = "Controller Utility"
-path = "Tools/ControllerUtility.exe"
-arguments = []
-working_directory = "Tools"
-launch = "before-game"
-delay_ms = 0
-required = false
-close_when_game_exits = true
+delay_ms = 5000
 ```
 
-Currently supported:
+The value is milliseconds. Delayed after-game tools are skipped if the game exits before the delay
+finishes.
+
+## 7. Supported entry types
+
+Tandem supports:
 
 - `.exe`
 - `.com`
 - `.bat`
 - `.cmd`
 
-BAT and CMD arguments are supported when they contain no shell metacharacters. Tandem rejects unsafe script paths or arguments instead of accepting free-form command text.
+BAT and CMD arguments are supported when they pass Tandem's script-safety validation. Tandem rejects
+shell operators, expansion characters, embedded quotes, control characters, and other unsafe command
+text.
 
-## 6. Set up GameNative
+Do not use arbitrary shell-command automation.
 
-Open your game's container settings in GameNative.
+## 8. Configure GameNative or Winlator
 
-Set the main executable to:
+Set the container's main executable to:
 
 ```text
 TandemGameCompanion.exe
 ```
 
-The working directory should be the folder containing:
+Use the folder containing these files as the working directory:
 
 ```text
 TandemGameCompanion.exe
 Tandem.toml
-the original game executable
+ExampleGame.exe
 ```
 
-Leave executable arguments empty unless you're specifically testing something.
+Do not point the container directly at the game executable while testing Tandem.
 
-Don't point GameNative directly at the game executable. Let Tandem handle launching the game.
+## 9. Launch and check the log
 
-## 7. Launch the game
+A normal session should:
 
-Start the container normally.
+1. read `Tandem.toml`;
+2. launch before-game tools;
+3. complete any configured wait;
+4. launch the game;
+5. launch after-game tools;
+6. stay alive while the game runs;
+7. apply configured cleanup; and
+8. write `Tandem.log`.
 
-Tandem should:
+A visible console window is normal in this alpha.
 
-1. Read `Tandem.toml`
-2. Launch any `before-game` tools
-3. Launch the game
-4. Launch any `after-game` tools
-5. Stay running while the game is open
-6. Close configured tools when the game exits
-7. Write everything to `Tandem.log`
-
-You may see a console window during testing. That's normal for this alpha version.
-
-## 8. Check the log
-
-Tandem creates:
-
-```text
-Tandem.log
-```
-
-in the same folder as `Tandem.toml`.
-
-A successful log might look something like:
+A successful log includes messages similar to:
 
 ```text
 Tandem Game Companion
@@ -247,64 +220,50 @@ Game exited with status: exit code: 0
 Tandem session finished.
 ```
 
-If something goes wrong, please include `Tandem.log` when reporting it.
+## 10. Validate the configuration
 
-## 9. Validate your configuration
-
-If you're running from Windows or a Wine command prompt, you can check your config with:
+From Windows or a Wine command prompt:
 
 ```text
 TandemGameCompanion.exe --validate
 ```
 
-A valid config should report something like:
-
-```text
-Configuration is valid: ...\Tandem.toml
-```
-
-You can also preview what Tandem plans to launch without actually starting anything:
+Preview the resolved launch plan without starting anything:
 
 ```text
 TandemGameCompanion.exe --dry-run
 ```
 
-These commands are optional and may not be convenient to run through GameNative.
+These commands may be less convenient to run through some Android compatibility environments.
 
-## 10. Current limitations
+## Current limitations
 
-Since this is still an alpha, a lot of features are not finished yet.
-
-Not included yet:
-
-- Graphical setup interface
-- File picker dialogs
-- A full controller-driven setup interface (the before-game confirmation uses a standard Windows dialog)
-- Notifications
-- Silent/background operation
-- Automatic config generation
-- Automatic worker restart after crashes
-- Full GameNative testing across devices
-- Support for every launcher type
+- No graphical configuration editor
+- No file-picker interface
+- No general controller-driven setup interface
+- No notifications or silent background mode
+- No automatic configuration generation
+- No automatic worker restart after crashes
+- Direct-child cleanup rather than full process-tree cleanup
+- Limited real-device testing across GameNative and Winlator versions
+- Limited support for games that launch through replacement processes
 
 Whenever possible, point Tandem directly at the real game executable instead of a launcher.
+Tandem cannot prevent the environment from closing the entire Wine session or container.
 
-Also keep in mind that Tandem can't stop the container from closing if GameNative shuts down the entire Wine environment or if the Tandem process itself is forcefully terminated.
+## Reporting results
 
-## 11. Reporting your results
+Include:
 
-Please include as much of the following as possible:
+- device or computer model;
+- operating system or Android version;
+- GameNative, Winlator, or Wine version;
+- game name and executable filename;
+- trainer or tool name;
+- whether each process launched;
+- what happened when the game exited;
+- a sanitized `Tandem.toml`;
+- `Tandem.log`; and
+- exact reproduction steps.
 
-- Device model
-- Android version
-- GameNative version
-- Game name
-- Game executable filename
-- Trainer or tool filename
-- Whether the game launched successfully
-- Whether the trainer/tool launched successfully
-- Whether the trainer detected the game
-- Whether the container stayed open
-- What happened when the game closed
-- `Tandem.log`
-- Your `Tandem.toml` file (remove any private information if needed)
+Do not include credentials, copyrighted game files, or proprietary third-party executables.

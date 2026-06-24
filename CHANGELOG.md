@@ -1,13 +1,23 @@
 # Changelog
 
-All notable changes to Tandem Game Companion will be documented here.
+All notable changes to Tandem Game Companion are documented here.
 
 ## Unreleased
+
+## [0.2.0-alpha] - 2026-06-24
 
 ### Added
 
 - General-purpose `before_game_wait` modes for native user confirmation and one-shot setup utilities.
+- A native Windows OK/Cancel prompt for trainers that must be configured before game launch.
 - Lifecycle integration tests for early failures, persistent tools, delayed launches, guardian recovery, and guardian-protocol spoof attempts.
+- A user guide, troubleshooting guide, and central documentation index.
+
+### Changed
+
+- Existing configurations remain compatible because omitted `before_game_wait` values default to `none`.
+- BAT/CMD game and tool entries preserve validated arguments through Tandem's fixed `cmd.exe` invocation.
+- Public documentation now uses a clearer project overview, navigation links, grouped references, and consistent user/developer sections.
 
 ### Fixed
 
