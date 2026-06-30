@@ -180,9 +180,9 @@ Tandem requires Rust 1.85 or newer.
 
 ```bash
 ./scripts/check-project.sh
-cargo fmt --check
+cargo fmt --all -- --check
 cargo check --all-targets --all-features
-cargo test --all-targets --all-features
+cargo test --all-targets --all-features -- --test-threads=1
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
