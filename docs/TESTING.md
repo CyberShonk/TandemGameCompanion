@@ -24,7 +24,7 @@ Unit tests cover:
 - CLI parsing;
 - TOML defaults;
 - wait-mode and preparation-recipe validation;
-- title-matcher behavior;
+- title-matcher and control-selector behavior, including ID/class AND semantics;
 - path and file-type validation;
 - log escape and overlap protection;
 - guardian protocol parsing;
@@ -73,13 +73,16 @@ The smoke harness:
 1. runs Windows-target tests through Wine;
 2. builds the x86-64 Windows MSVC executable;
 3. uses an isolated Wine prefix;
-4. compiles a small Windows helper;
+4. compiles dedicated Windows window and control helpers;
 5. exercises EXE, BAT, and CMD launch paths;
 6. verifies BAT/CMD arguments;
 7. verifies PID-scoped window readiness despite a same-title window from another process;
-8. checks before-game and after-game ordering;
-9. confirms logged preparation and exit statuses; and
-10. simulates worker failure after game startup to verify guardian lifetime and exit status.
+8. verifies process- and parent-window-scoped control readiness while rejecting other-process,
+   other-window, hidden, disabled, and partial ID/class matches;
+9. checks sequential preparation plus before-game and after-game ordering;
+10. verifies control tool-exit detection plus required and optional timeout policies;
+11. confirms logged preparation and exit statuses; and
+12. simulates worker failure after game startup to verify guardian lifetime and exit status.
 
 See [Windows Testing](WINDOWS_TESTING.md) for prerequisites.
 

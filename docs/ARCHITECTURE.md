@@ -33,7 +33,7 @@ cleared for that channel before games or tools are started.
 | `config.rs` | TOML parsing, path validation, file-type checks, and limits |
 | `guardian.rs` | Worker supervision, protocol handling, and fallback game wait |
 | `launcher.rs` | Launch order, preparation policy, waits, process creation, logging, exit propagation, and cleanup |
-| `platform.rs` | Windows process handles, PID-scoped window discovery, status-handle protection, and native confirmation UI |
+| `platform.rs` | Windows process handles, PID-scoped top-level window and descendant-control discovery, status-handle protection, and native confirmation UI |
 | `preparation.rs` | Sequential bounded tool-preparation execution and process-exit detection |
 | `protocol.rs` | Reserved worker-to-guardian game-PID record |
 | `error.rs` | Error types and process exit-code mapping |
@@ -53,7 +53,7 @@ cleared for that channel before games or tools are started.
 
 - loads and validates `Tandem.toml`;
 - launches before-game tools;
-- executes their bounded preparation recipes against the directly launched process;
+- executes their bounded read-only window/control preparation recipes against the directly launched process;
 - performs user-confirmation or tool-exit waits;
 - starts and reports the game;
 - launches after-game tools;

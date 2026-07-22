@@ -37,7 +37,7 @@ Tandem can:
 - launch EXE, COM, BAT, and CMD entries;
 - start tools before or after the game;
 - delay tool launches when required;
-- wait for a visible top-level window owned by a launched before-game tool;
+- wait for a visible top-level window or visible enabled standard Win32 control owned by a launched before-game tool;
 - pause for a native confirmation before starting the game;
 - wait for a one-shot setup utility to finish;
 - allow optional tool failures without blocking the game;
@@ -56,6 +56,7 @@ channel.
 |---|---|
 | Start a normal companion after the game | `launch = "after-game"` |
 | Wait until a launched trainer window is ready | `[[tools.prepare]]` with `action = "wait-for-window"` |
+| Wait until a standard trainer control is ready | `[[tools.prepare]]` with `action = "wait-for-control"` |
 | Open a trainer, configure it, then continue | `before_game_wait = "user-confirmation"` |
 | Run a setup utility and wait for success | `before_game_wait = "tool-exit"` |
 | Prevent the game from starting without a tool | `required = true` |
@@ -122,6 +123,26 @@ timeout_ms = 10000
 
 Window matching is restricted to the launched tool PID. Tandem does not focus, activate, move,
 click, or otherwise modify the matched window.
+
+### Wait for a standard Win32 control
+
+Use this after the tool's parent window exists when the game should remain stopped until a specific
+standard control becomes visible and enabled:
+
+```toml
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+timeout_ms = 10000
+```
+
+The parent top-level window and descendant control must belong to the exact tool PID Tandem
+launched. When both `control_id` and `control_class_equals` are present, both must match. Tandem
+does not read control text, select an option, click, focus, activate, send input, use UI Automation,
+or modify the control. Custom-drawn controls without a standard descendant HWND are not supported by
+this action.
 
 ### Before-game trainer confirmation
 

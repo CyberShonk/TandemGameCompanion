@@ -409,6 +409,106 @@ timeout_ms = 1000
     assert!(wait_for_process_exit(pid), "trainer should be cleaned up");
 }
 
+#[cfg(not(windows))]
+#[test]
+fn required_control_preparation_fails_before_game_and_cleans_up_the_tool() {
+    let directory = TestDirectory::new("control-preparation-unsupported");
+    write_script(
+        &directory.path,
+        "trainer.sh",
+        "echo $$ > trainer.pid\nwhile :; do sleep 1; done",
+    );
+    write_script(
+        &directory.path,
+        "game.sh",
+        "echo game-start > game-started.txt",
+    );
+    write_config(
+        &directory.path,
+        r#"config_version = 1
+[game]
+name = "Game"
+path = "game.sh"
+
+[[tools]]
+name = "Trainer"
+path = "trainer.sh"
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_id = 1001
+control_class_equals = "ComboBox"
+timeout_ms = 1000
+"#,
+    );
+
+    let output = run_tandem(&directory.path, None, &[]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        output
+            .stderr
+            .contains("wait-for-control preparation is only available in Windows builds")
+    );
+    assert!(!directory.path.join("game-started.txt").exists());
+    let pid = started_process_pid(&output, "Trainer");
+    assert!(wait_for_process_exit(pid), "trainer should be cleaned up");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn optional_control_preparation_failure_continues_without_the_tool() {
+    let directory = TestDirectory::new("optional-control-preparation-unsupported");
+    write_script(
+        &directory.path,
+        "trainer.sh",
+        "echo $$ > trainer.pid\nwhile :; do sleep 1; done",
+    );
+    write_script(
+        &directory.path,
+        "game.sh",
+        "echo game-start > game-started.txt",
+    );
+    write_config(
+        &directory.path,
+        r#"config_version = 1
+[launcher]
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Game"
+path = "game.sh"
+
+[[tools]]
+name = "Trainer"
+path = "trainer.sh"
+launch = "before-game"
+required = false
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_id = 1001
+timeout_ms = 1000
+"#,
+    );
+
+    let output = run_tandem(&directory.path, None, &[]);
+
+    assert!(output.status.success(), "stderr: {}", output.stderr);
+    assert!(directory.path.join("game-started.txt").exists());
+    assert!(output.stdout.contains(
+        "Optional tool Trainer preparation failed: wait-for-control preparation is only available in Windows builds. Continuing without this tool."
+    ));
+    let pid = started_process_pid(&output, "Trainer");
+    assert!(wait_for_process_exit(pid), "trainer should be cleaned up");
+}
+
 #[test]
 fn cleans_up_a_started_tool_when_game_spawn_fails() {
     let directory = TestDirectory::new("game-spawn-failure");

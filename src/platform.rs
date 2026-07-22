@@ -1,5 +1,12 @@
-use crate::config::WindowTitleMatcher;
+use crate::config::{ControlSelector, WindowTitleMatcher};
 use crate::error::AppError;
+
+#[derive(Debug)]
+pub struct MatchedControl {
+    pub window_title: String,
+    pub control_id: i32,
+    pub class_name: String,
+}
 
 #[cfg(windows)]
 pub fn protect_guardian_status_channel() -> Result<(), AppError> {
@@ -267,5 +274,158 @@ pub fn find_top_level_window(
 ) -> Result<Option<String>, AppError> {
     Err(AppError::runtime(
         "wait-for-window preparation is only available in Windows builds",
+    ))
+}
+
+#[cfg(windows)]
+pub fn find_descendant_control(
+    pid: u32,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+) -> Result<Option<MatchedControl>, AppError> {
+    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumChildWindows, EnumWindows, GetClassNameW, GetDlgCtrlID, GetWindowTextW,
+        GetWindowThreadProcessId, IsWindowVisible,
+    };
+    use windows::core::BOOL;
+
+    struct SearchContext {
+        pid: u32,
+        window_matcher: *const WindowTitleMatcher,
+        control_selector: *const ControlSelector,
+        matched_control: Option<MatchedControl>,
+    }
+
+    struct ChildSearchContext {
+        pid: u32,
+        control_selector: *const ControlSelector,
+        matched_control: Option<(i32, String)>,
+    }
+
+    unsafe extern "system" fn inspect_control(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        // SAFETY: EnumChildWindows invokes this callback synchronously while ChildSearchContext
+        // remains alive and exclusively borrowed by inspect_window.
+        let context = unsafe { &mut *(lparam.0 as *mut ChildSearchContext) };
+
+        if context.matched_control.is_some()
+            || !unsafe { IsWindowVisible(hwnd) }.as_bool()
+            || !unsafe { IsWindowEnabled(hwnd) }.as_bool()
+        {
+            return BOOL(1);
+        }
+
+        let mut control_pid = 0;
+        let _ = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut control_pid)) };
+        if control_pid != context.pid {
+            return BOOL(1);
+        }
+
+        let control_id = unsafe { GetDlgCtrlID(hwnd) };
+        let mut class_buffer = [0_u16; 257];
+        let class_length = unsafe { GetClassNameW(hwnd, &mut class_buffer) };
+        if class_length <= 0 {
+            return BOOL(1);
+        }
+
+        let class_name = String::from_utf16_lossy(&class_buffer[..class_length as usize]);
+        // SAFETY: control_selector points to the borrowed selector that remains alive for the
+        // synchronous EnumWindows and EnumChildWindows calls.
+        let control_selector = unsafe { &*context.control_selector };
+        if control_selector.matches(control_id, &class_name) {
+            context.matched_control = Some((control_id, class_name));
+        }
+
+        BOOL(1)
+    }
+
+    unsafe extern "system" fn inspect_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        // SAFETY: EnumWindows invokes this callback synchronously while SearchContext remains
+        // alive and exclusively borrowed by find_descendant_control.
+        let context = unsafe { &mut *(lparam.0 as *mut SearchContext) };
+
+        if context.matched_control.is_some() || !unsafe { IsWindowVisible(hwnd) }.as_bool() {
+            return BOOL(1);
+        }
+
+        let mut window_pid = 0;
+        let _ = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut window_pid)) };
+        if window_pid != context.pid {
+            return BOOL(1);
+        }
+
+        let mut title_buffer = [0_u16; 1024];
+        let title_length = unsafe { GetWindowTextW(hwnd, &mut title_buffer) };
+        if title_length <= 0 {
+            return BOOL(1);
+        }
+
+        let window_title = String::from_utf16_lossy(&title_buffer[..title_length as usize]);
+        // SAFETY: window_matcher points to the borrowed matcher that remains alive for the
+        // synchronous EnumWindows call.
+        let window_matcher = unsafe { &*context.window_matcher };
+        if !window_matcher.matches(&window_title) {
+            return BOOL(1);
+        }
+
+        let mut child_context = ChildSearchContext {
+            pid: context.pid,
+            control_selector: context.control_selector,
+            matched_control: None,
+        };
+        let child_context_pointer = &mut child_context as *mut ChildSearchContext;
+
+        // SAFETY: inspect_control has the required callback ABI. EnumChildWindows is synchronous,
+        // hwnd is a live top-level window supplied by EnumWindows, and child_context_pointer
+        // remains valid and uniquely borrowed until child enumeration completes.
+        let _ = unsafe {
+            EnumChildWindows(
+                Some(hwnd),
+                Some(inspect_control),
+                LPARAM(child_context_pointer as isize),
+            )
+        };
+
+        if let Some((control_id, class_name)) = child_context.matched_control {
+            context.matched_control = Some(MatchedControl {
+                window_title,
+                control_id,
+                class_name,
+            });
+        }
+
+        BOOL(1)
+    }
+
+    let mut context = SearchContext {
+        pid,
+        window_matcher,
+        control_selector,
+        matched_control: None,
+    };
+    let context_pointer = &mut context as *mut SearchContext;
+
+    // SAFETY: inspect_window has the required system callback ABI. EnumWindows is synchronous,
+    // and context_pointer remains valid and uniquely borrowed until enumeration completes.
+    unsafe { EnumWindows(Some(inspect_window), LPARAM(context_pointer as isize)) }.map_err(
+        |source| {
+            AppError::runtime(format!(
+                "could not enumerate top-level windows for companion process {pid}: {source}"
+            ))
+        },
+    )?;
+
+    Ok(context.matched_control)
+}
+
+#[cfg(not(windows))]
+pub fn find_descendant_control(
+    _pid: u32,
+    _window_matcher: &WindowTitleMatcher,
+    _control_selector: &ControlSelector,
+) -> Result<Option<MatchedControl>, AppError> {
+    Err(AppError::runtime(
+        "wait-for-control preparation is only available in Windows builds",
     ))
 }

@@ -31,9 +31,14 @@ Tandem must not:
 - Recursive Tandem launch is rejected.
 - Tool-count, argument-size, and delay limits are enforced.
 - Preparation recipes are allowlisted, count-limited, and restricted to bounded waits.
-- Window discovery accepts only visible top-level windows owned by the exact launched tool PID.
-- The current window action performs no activation, focus, input, movement, or mutation.
-- Window preparation rejects BAT/CMD wrappers and does not follow descendant processes.
+- Top-level window discovery accepts only visible windows owned by the exact launched tool PID.
+- Control discovery is restricted to visible, enabled descendant HWNDs under the selected top-level
+  window and owned by that same PID.
+- Control selection uses only a numeric control ID, exact Win32 class name, or both with AND
+  semantics. It does not read cross-process control text.
+- Preparation performs no activation, focus, input, movement, option selection, button invocation,
+  checkbox/radio changes, UI Automation, image matching, or mutation.
+- Window and control preparation reject BAT/CMD wrappers and do not follow descendant processes.
 - Existing log targets and parent directories are canonicalized to stop symlink or junction
   escapes.
 - Dangling log links are rejected.

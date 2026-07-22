@@ -67,6 +67,20 @@ Possible causes:
 Use `title_contains` for a stable title fragment when the full title includes a version or status.
 Do not rely on another process with the same title; Tandem deliberately ignores it.
 
+## A `wait-for-control` preparation step times out
+
+Check the parent-window selector, control ID, exact class capitalization, timeout, and launched PID in
+`Tandem.log`.
+
+Tandem accepts only a visible, enabled descendant HWND under a matching visible top-level window
+owned by the exact launched-tool PID. A matching control is deliberately ignored when it belongs to
+another process, sits under a different top-level window, is hidden, is disabled, or satisfies only
+one half of a combined ID/class selector.
+
+Standard controls expose class names such as `ComboBox` or `Button`. Custom-drawn interfaces may not
+expose a normal descendant control and cannot be detected by this action. Tandem does not inspect
+control text, use UI Automation, or match images.
+
 ## A required setup utility stops the session
 
 With:

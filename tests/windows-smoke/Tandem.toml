@@ -54,6 +54,52 @@ title_equals = "Shared Trainer Window"
 timeout_ms = 5000
 
 [[tools]]
+name = "Impostor Control Tool"
+path = "ControlTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "impostor",
+  "Scoped Trainer Controls",
+  "1001",
+  "10000"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools]]
+name = "Scoped Control Tool"
+path = "ControlTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "scoped",
+  "Scoped Trainer Controls",
+  "1001",
+  "750",
+  "750",
+  "10000"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 1000
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Scoped Trainer Controls"
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Scoped Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+timeout_ms = 5000
+
+[[tools]]
 name = "Before CMD Tool"
 path = "BeforeTool.cmd"
 arguments = ["before-cmd-arg"]

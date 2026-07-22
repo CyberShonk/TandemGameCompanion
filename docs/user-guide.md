@@ -112,6 +112,33 @@ window; it does not focus, move, click, or send input to it.
 Preparation recipes currently require a directly launched EXE or COM tool. BAT/CMD wrappers and
 launchers that exit after creating a separate GUI process are outside the direct-PID boundary.
 
+### Wait for a standard Win32 control
+
+Add a second sequential preparation step when the parent window is not enough and the game must wait
+for one specific standard control to become visible and enabled:
+
+```toml
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+timeout_ms = 10000
+```
+
+Define exactly one parent selector: `window_title_equals` or `window_title_contains`. Define
+`control_id`, `control_class_equals`, or both. When both control selectors are present, Tandem uses
+AND semantics.
+
+The parent top-level window and descendant control must be owned by the exact PID Tandem launched.
+Matching controls in another process, in a different top-level window, while hidden, or while
+disabled are ignored. Tandem does not read control text, choose an option, invoke a button, change a
+checkbox or radio button, focus or activate a window, send keyboard or mouse input, use UI
+Automation, inspect images, or otherwise mutate the tool.
+
+This action is limited to standard HWND-based Win32 controls with stable IDs or class names.
+Custom-drawn interfaces may not expose a compatible control.
+
 ### Trainer configuration before game startup
 
 ```toml

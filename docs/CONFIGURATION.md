@@ -47,6 +47,13 @@ close_when_game_exits = true
 action = "wait-for-window"
 title_contains = "Trainer"
 timeout_ms = 10000
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+timeout_ms = 10000
 ```
 
 ## Fields
@@ -67,10 +74,14 @@ timeout_ms = 10000
 | tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
 | tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
 | tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
-| tool preparation | `action` | required | Currently `wait-for-window` |
-| tool preparation | `title_equals` | unset | Exact case-sensitive window-title match |
-| tool preparation | `title_contains` | unset | Case-sensitive window-title substring match |
-| tool preparation | `timeout_ms` | `10000` | Bounded window wait from 1 to 120,000 ms |
+| tool preparation | `action` | required | `wait-for-window` or `wait-for-control` |
+| `wait-for-window` | `title_equals` | unset | Exact case-sensitive top-level window-title match |
+| `wait-for-window` | `title_contains` | unset | Case-sensitive top-level window-title substring match |
+| `wait-for-control` | `window_title_equals` | unset | Exact case-sensitive parent top-level window title |
+| `wait-for-control` | `window_title_contains` | unset | Case-sensitive parent top-level window-title substring |
+| `wait-for-control` | `control_id` | unset | Numeric Win32 control ID from 1 to 2,147,483,647 |
+| `wait-for-control` | `control_class_equals` | unset | Exact case-sensitive Win32 control class name |
+| tool preparation | `timeout_ms` | `10000` | Bounded wait from 1 to 120,000 ms |
 
 ## Tool preparation recipes
 
@@ -95,14 +106,40 @@ Matching is case-sensitive and applies only to visible top-level windows owned b
 Tandem launched. A same-title window owned by another process is ignored. Tandem does not focus,
 activate, move, click, send input to, or otherwise mutate the matched window.
 
+### `wait-for-control`
+
+```toml
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+timeout_ms = 10000
+```
+
+The parent top-level window must define exactly one of `window_title_equals` or
+`window_title_contains`. The descendant control must define `control_id`,
+`control_class_equals`, or both. When both control fields are present, Tandem requires both to
+match.
+
+Discovery is restricted to visible top-level windows and visible, enabled descendant controls owned
+by the exact PID Tandem launched. A matching control in another process or under a different
+top-level window cannot satisfy the step. Class matching uses the exact standard Win32 window class
+name. Tandem does not read control text, use UI Automation, inspect pixels, focus or activate a
+window, send input, or mutate the control.
+
+This action is intended for standard HWND-based Win32 controls. Custom-drawn interfaces and controls
+that do not expose a normal descendant window, numeric ID, or stable class name are outside this
+action's scope.
+
 A required tool or a globally strict optional-tool policy fails the session when preparation times
-out, the tool exits before a match appears, or window enumeration fails. With
+out, the tool exits before a match appears, or discovery reports an error. With
 `continue_on_optional_tool_failure = true`, Tandem logs the failure, terminates the directly
 launched optional tool, skips its remaining preparation and wait behavior, and continues without it.
 
 Preparation requires a directly launched EXE or COM tool. BAT/CMD entries are rejected because the
 direct child would be `cmd.exe`. The current process boundary also does not follow child processes,
-so a launcher that exits and creates a separate GUI process cannot be matched by this first action.
+so a launcher that exits and creates a separate GUI process cannot be matched by either action.
 
 ## Before-game wait modes
 
@@ -222,8 +259,9 @@ There is no free-form shell-command field.
 
 - 32 configured tools
 - 16 preparation steps per tool
-- 256 non-control characters per window-title selector
-- 2-minute maximum window wait
+- 256 non-control characters per window-title or control-class selector
+- numeric control IDs from 1 to 2,147,483,647
+- 2-minute maximum preparation wait
 - 16 KiB combined argument text per program
 - 10-minute maximum tool delay
 - configuration version `1`

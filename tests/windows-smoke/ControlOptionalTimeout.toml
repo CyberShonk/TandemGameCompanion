@@ -1,0 +1,38 @@
+config_version = 1
+
+[launcher]
+log_file = "ControlOptionalTimeout.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Optional Timeout Game"
+path = "SmokeGame.exe"
+arguments = [
+  "control-optional-timeout-events.txt",
+  "control-optional-timeout-game-start",
+  "0"
+]
+working_directory = "."
+
+[[tools]]
+name = "Optional Control Timeout Tool"
+path = "ControlTool.exe"
+arguments = [
+  "control-optional-timeout-events.txt",
+  "impostor",
+  "Optional Timeout Window",
+  "1001",
+  "10000"
+]
+working_directory = "."
+launch = "before-game"
+required = false
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_equals = "Optional Timeout Window"
+control_class_equals = "ComboBox"
+control_id = 9999
+timeout_ms = 300

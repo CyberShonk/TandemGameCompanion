@@ -11,6 +11,7 @@ const MAX_PREPARATION_STEPS: usize = 16;
 const MAX_DELAY_MS: u64 = 600_000;
 const MAX_WINDOW_WAIT_MS: u64 = 120_000;
 const MAX_WINDOW_TITLE_CHARS: usize = 256;
+const MAX_CONTROL_CLASS_CHARS: usize = 256;
 const MAX_ARGUMENT_BYTES: usize = 16 * 1024;
 const DEFAULT_WINDOW_WAIT_TIMEOUT_MS: u64 = 10_000;
 
@@ -83,6 +84,14 @@ pub enum PreparationStepConfig {
         #[serde(default = "default_window_wait_timeout_ms")]
         timeout_ms: u64,
     },
+    WaitForControl {
+        window_title_equals: Option<String>,
+        window_title_contains: Option<String>,
+        control_id: Option<u32>,
+        control_class_equals: Option<String>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
@@ -136,12 +145,23 @@ pub enum PreparationStep {
         matcher: WindowTitleMatcher,
         timeout_ms: u64,
     },
+    WaitForControl {
+        window_matcher: WindowTitleMatcher,
+        control_selector: ControlSelector,
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WindowTitleMatcher {
     Equals(String),
     Contains(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ControlSelector {
+    pub id: Option<u32>,
+    pub class_equals: Option<String>,
 }
 
 impl WindowTitleMatcher {
@@ -161,6 +181,29 @@ impl WindowTitleMatcher {
     }
 }
 
+impl ControlSelector {
+    #[cfg(any(windows, test))]
+    pub fn matches(&self, id: i32, class_name: &str) -> bool {
+        self.id
+            .is_none_or(|expected| i32::try_from(expected) == Ok(id))
+            && self
+                .class_equals
+                .as_ref()
+                .is_none_or(|expected| class_name == expected)
+    }
+
+    pub fn description(&self) -> String {
+        match (&self.id, &self.class_equals) {
+            (Some(id), Some(class_name)) => {
+                format!("control ID {id} and class equals {class_name:?}")
+            }
+            (Some(id), None) => format!("control ID {id}"),
+            (None, Some(class_name)) => format!("control class equals {class_name:?}"),
+            (None, None) => "no control selector".to_owned(),
+        }
+    }
+}
+
 impl PreparationStep {
     pub fn description(&self) -> String {
         match self {
@@ -170,6 +213,16 @@ impl PreparationStep {
             } => format!(
                 "wait-for-window ({}; timeout={}ms)",
                 matcher.description(),
+                timeout_ms
+            ),
+            Self::WaitForControl {
+                window_matcher,
+                control_selector,
+                timeout_ms,
+            } => format!(
+                "wait-for-control (window {}; {}; visible and enabled; timeout={}ms)",
+                window_matcher.description(),
+                control_selector.description(),
                 timeout_ms
             ),
         }
@@ -364,50 +417,25 @@ fn resolve_preparation_step(
     step: &PreparationStepConfig,
     problems: &mut Vec<String>,
 ) -> Option<PreparationStep> {
+    let label = format!("tool {tool_name} preparation step {}", step_index + 1);
+
     match step {
         PreparationStepConfig::WaitForWindow {
             title_equals,
             title_contains,
             timeout_ms,
         } => {
-            let label = format!("tool {tool_name} preparation step {}", step_index + 1);
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let matcher = resolve_window_title_matcher(
+                &label,
+                "title_equals",
+                title_equals,
+                "title_contains",
+                title_contains,
+                problems,
+            );
 
-            if !(1..=MAX_WINDOW_WAIT_MS).contains(timeout_ms) {
-                problems.push(format!(
-                    "{label} timeout_ms must be between 1 and {MAX_WINDOW_WAIT_MS}"
-                ));
-            }
-
-            let matcher = match (title_equals, title_contains) {
-                (Some(_), Some(_)) => {
-                    problems.push(format!(
-                        "{label} must define exactly one of title_equals or title_contains"
-                    ));
-                    None
-                }
-                (None, None) => {
-                    problems.push(format!(
-                        "{label} must define exactly one of title_equals or title_contains"
-                    ));
-                    None
-                }
-                (Some(value), None) => validate_window_title_matcher(
-                    &label,
-                    "title_equals",
-                    value,
-                    WindowTitleMatcher::Equals,
-                    problems,
-                ),
-                (None, Some(value)) => validate_window_title_matcher(
-                    &label,
-                    "title_contains",
-                    value,
-                    WindowTitleMatcher::Contains,
-                    problems,
-                ),
-            };
-
-            if !(1..=MAX_WINDOW_WAIT_MS).contains(timeout_ms) {
+            if !timeout_valid {
                 return None;
             }
 
@@ -416,6 +444,105 @@ fn resolve_preparation_step(
                 timeout_ms: *timeout_ms,
             })
         }
+        PreparationStepConfig::WaitForControl {
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            timeout_ms,
+        } => {
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let window_matcher = resolve_window_title_matcher(
+                &label,
+                "window_title_equals",
+                window_title_equals,
+                "window_title_contains",
+                window_title_contains,
+                problems,
+            );
+
+            if control_id.is_none() && control_class_equals.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id, control_class_equals, or both"
+                ));
+            }
+
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {}",
+                        i32::MAX
+                    ));
+                    false
+                }
+                _ => true,
+            };
+
+            let class_equals = control_class_equals
+                .as_ref()
+                .and_then(|value| validate_control_class(&label, value, problems));
+            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+
+            if !timeout_valid
+                || !control_id_valid
+                || !control_class_valid
+                || (control_id.is_none() && control_class_equals.is_none())
+            {
+                return None;
+            }
+
+            window_matcher.map(|window_matcher| PreparationStep::WaitForControl {
+                window_matcher,
+                control_selector: ControlSelector {
+                    id: *control_id,
+                    class_equals,
+                },
+                timeout_ms: *timeout_ms,
+            })
+        }
+    }
+}
+
+fn validate_preparation_timeout(label: &str, timeout_ms: u64, problems: &mut Vec<String>) -> bool {
+    if (1..=MAX_WINDOW_WAIT_MS).contains(&timeout_ms) {
+        true
+    } else {
+        problems.push(format!(
+            "{label} timeout_ms must be between 1 and {MAX_WINDOW_WAIT_MS}"
+        ));
+        false
+    }
+}
+
+fn resolve_window_title_matcher(
+    label: &str,
+    equals_field: &str,
+    title_equals: &Option<String>,
+    contains_field: &str,
+    title_contains: &Option<String>,
+    problems: &mut Vec<String>,
+) -> Option<WindowTitleMatcher> {
+    match (title_equals, title_contains) {
+        (Some(_), Some(_)) | (None, None) => {
+            problems.push(format!(
+                "{label} must define exactly one of {equals_field} or {contains_field}"
+            ));
+            None
+        }
+        (Some(value), None) => validate_window_title_matcher(
+            label,
+            equals_field,
+            value,
+            WindowTitleMatcher::Equals,
+            problems,
+        ),
+        (None, Some(value)) => validate_window_title_matcher(
+            label,
+            contains_field,
+            value,
+            WindowTitleMatcher::Contains,
+            problems,
+        ),
     }
 }
 
@@ -446,6 +573,29 @@ fn validate_window_title_matcher(
     }
 
     Some(build(value.to_owned()))
+}
+
+fn validate_control_class(label: &str, value: &str, problems: &mut Vec<String>) -> Option<String> {
+    if value.trim().is_empty() {
+        problems.push(format!("{label} control_class_equals may not be empty"));
+        return None;
+    }
+
+    if value.chars().any(char::is_control) {
+        problems.push(format!(
+            "{label} control_class_equals may not contain control characters"
+        ));
+        return None;
+    }
+
+    if value.chars().count() > MAX_CONTROL_CLASS_CHARS {
+        problems.push(format!(
+            "{label} control_class_equals exceeds the {MAX_CONTROL_CLASS_CHARS}-character limit"
+        ));
+        return None;
+    }
+
+    Some(value.to_owned())
 }
 
 fn resolve_program(
@@ -780,8 +930,9 @@ fn default_window_wait_timeout_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeGameWait, Config, LaunchTiming, PreparationStepConfig, WindowTitleMatcher,
-        contains_cmd_metacharacters, is_external_syntax, load_and_resolve,
+        BeforeGameWait, Config, ControlSelector, LaunchTiming, PreparationStep,
+        PreparationStepConfig, WindowTitleMatcher, contains_cmd_metacharacters, is_external_syntax,
+        load_and_resolve,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -907,11 +1058,90 @@ title_contains = "Trainer"
     }
 
     #[test]
+    fn parses_wait_for_control_preparation() {
+        let config: Config = toml::from_str(
+            r#"
+config_version = 1
+
+[game]
+name = "Demo Game"
+path = "Game.exe"
+
+[[tools]]
+name = "Trainer"
+path = "Trainer.exe"
+launch = "before-game"
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+"#,
+        )
+        .expect("control preparation should parse");
+
+        assert_eq!(config.tools[0].prepare.len(), 1);
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::WaitForControl {
+                window_title_equals: None,
+                window_title_contains: Some("Trainer".into()),
+                control_id: Some(1001),
+                control_class_equals: Some("ComboBox".into()),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+
+    #[test]
     fn window_title_matchers_match_expected_titles() {
         assert!(WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer"));
         assert!(!WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer 1.0"));
         assert!(WindowTitleMatcher::Contains("Trainer".into()).matches("Universal Trainer 1.0"));
         assert!(!WindowTitleMatcher::Contains("trainer".into()).matches("Trainer"));
+    }
+
+    #[test]
+    fn control_selectors_use_and_semantics_when_both_are_present() {
+        let both = ControlSelector {
+            id: Some(1001),
+            class_equals: Some("ComboBox".into()),
+        };
+        assert!(both.matches(1001, "ComboBox"));
+        assert!(!both.matches(1002, "ComboBox"));
+        assert!(!both.matches(1001, "Button"));
+
+        let id_only = ControlSelector {
+            id: Some(1001),
+            class_equals: None,
+        };
+        assert!(id_only.matches(1001, "Button"));
+        assert!(!id_only.matches(1002, "Button"));
+
+        let class_only = ControlSelector {
+            id: None,
+            class_equals: Some("ComboBox".into()),
+        };
+        assert!(class_only.matches(1002, "ComboBox"));
+        assert!(!class_only.matches(1002, "combobox"));
+    }
+
+    #[test]
+    fn control_preparation_description_is_deterministic() {
+        let step = PreparationStep::WaitForControl {
+            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+            control_selector: ControlSelector {
+                id: Some(1001),
+                class_equals: Some("ComboBox".into()),
+            },
+            timeout_ms: 10_000,
+        };
+
+        assert_eq!(
+            step.description(),
+            "wait-for-control (window title contains \"Trainer\"; control ID 1001 and class equals \"ComboBox\"; visible and enabled; timeout=10000ms)"
+        );
     }
 
     #[test]
@@ -1035,6 +1265,157 @@ title_contains = "Tool"
                 .to_string()
                 .contains("preparation requires a directly launched EXE or COM file")
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_control_preparation_on_after_game_tools() {
+        let root = test_directory("after-game-control-preparation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "after-game"
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Tool"
+control_id = 1001
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error =
+            load_and_resolve(&config).expect_err("after-game control preparation must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("preparation requires launch = \"before-game\"")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_control_preparation_for_script_wrappers() {
+        let root = test_directory("script-control-preparation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool.cmd"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool.cmd"
+launch = "before-game"
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Tool"
+control_class_equals = "ComboBox"
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error =
+            load_and_resolve(&config).expect_err("script control preparation must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("preparation requires a directly launched EXE or COM file")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_ambiguous_control_preparation() {
+        let root = test_directory("ambiguous-control-preparation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_equals = "Tool"
+window_title_contains = "Tool"
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error =
+            load_and_resolve(&config).expect_err("ambiguous control preparation must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains(
+                "must define exactly one of window_title_equals or window_title_contains"
+            )
+        );
+        assert!(message.contains("must define control_id, control_class_equals, or both"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_invalid_or_unbounded_control_waits() {
+        let root = test_directory("invalid-control-waits");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Tool"
+control_id = 1001
+timeout_ms = 0
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Tool"
+control_class_equals = "ComboBox"
+timeout_ms = 120001
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_contains = "Tool"
+control_id = 2147483648
+timeout_ms = 1000
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("invalid control waits must be rejected");
+        let message = error.to_string();
+        assert_eq!(
+            message
+                .matches("timeout_ms must be between 1 and 120000")
+                .count(),
+            2
+        );
+        assert!(message.contains("control_id must be between 1 and 2147483647"));
         let _ = fs::remove_dir_all(root);
     }
 

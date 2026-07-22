@@ -51,6 +51,11 @@ A successful run covers:
 - EXE, BAT, and CMD launch paths;
 - BAT/CMD argument preservation;
 - PID-scoped `wait-for-window` preparation with a competing same-title window;
+- process- and parent-window-scoped `wait-for-control` preparation;
+- rejection of matching controls in another process or another top-level window;
+- rejection of hidden, disabled, and partial ID/class matches;
+- sequential window and control preparation;
+- control preparation tool-exit detection plus required and optional timeout paths;
 - before-game `tool-exit` waiting;
 - after-game delays;
 - launch ordering;
@@ -65,6 +70,8 @@ Automated Wine coverage does not replace real-environment testing. Manually veri
 
 - normal game launch;
 - a successful and timed-out `wait-for-window` preparation;
+- successful and timed-out `wait-for-control` preparation against a real standard Win32 control;
+- exact PID ownership, parent-window scoping, hidden/disabled filtering, and ID/class AND semantics;
 - the native user-confirmation dialog;
 - touch and controller focus mapping;
 - Cancel cleanup;

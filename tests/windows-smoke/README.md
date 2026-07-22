@@ -11,6 +11,12 @@ The test covers:
 - BAT and CMD companion-tool launching with validated arguments.
 - Paths containing spaces.
 - PID-scoped visible-window preparation with a same-title competing process.
+- Sequential `wait-for-window` and `wait-for-control` preparation.
+- Process and parent-top-level-window control scoping.
+- Hidden and disabled control rejection.
+- Numeric control ID plus exact class-name AND semantics.
+- Required tool exit and timeout failures during control preparation.
+- Optional control timeout continuation and cleanup.
 - Tandem remaining alive until the game exits.
 - Successful child-process exit statuses.
 - Guardian lifetime and nonzero exit preservation after a simulated worker failure.

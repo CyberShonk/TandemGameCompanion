@@ -10,11 +10,17 @@ All notable changes to Tandem Game Companion are documented here.
 - Process-scoped visible top-level window discovery using exact-title or title-contains matching.
 - Windows smoke coverage proving that a same-title window from another process cannot satisfy a
   tool's preparation step.
+- Process-scoped `wait-for-control` preparation for visible, enabled standard Win32 descendant
+  controls selected by parent-window title, numeric control ID, exact class name, or ID/class AND
+  semantics.
+- Windows smoke coverage for other-process, other-top-level-window, hidden, disabled, and partial
+  ID/class control false matches.
 
 ### Security
 
-- Window discovery is restricted to the exact PID Tandem launched and performs no focus, input,
-  activation, movement, or window mutation.
+- Window and control discovery are restricted to the exact PID Tandem launched. Control discovery
+  remains under the selected parent top-level window and performs no text reading, focus, input,
+  activation, option selection, invocation, UI Automation, image matching, or mutation.
 
 ## [0.2.0-alpha] - 2026-06-24
 
