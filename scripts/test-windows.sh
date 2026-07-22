@@ -14,7 +14,7 @@ export WINEDEBUG="${WINEDEBUG:--all}"
 
 cd "$ROOT_DIR"
 
-for command in cargo wine wineboot x86_64-w64-mingw32-gcc tr grep; do
+for command in cargo wine wineboot x86_64-w64-mingw32-gcc tr grep cut; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Required command not found: $command" >&2
     exit 1
@@ -26,6 +26,14 @@ if ! cargo xwin --version >/dev/null 2>&1; then
   exit 1
 fi
 
+echo "== Preparing isolated Wine prefix =="
+mkdir -p "$(dirname "$WINEPREFIX")"
+
+if [[ ! -f "$WINEPREFIX/system.reg" ]]; then
+  wineboot -u
+fi
+
+echo
 echo "== Windows-target unit tests =="
 CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUNNER=wine \
 cargo xwin test \
@@ -33,14 +41,6 @@ cargo xwin test \
 
 echo
 "$ROOT_DIR/scripts/build-windows.sh"
-
-echo
-echo "== Preparing isolated Wine prefix =="
-mkdir -p "$(dirname "$WINEPREFIX")"
-
-if [[ ! -f "$WINEPREFIX/system.reg" ]]; then
-  wineboot -u
-fi
 
 echo
 echo "== Preparing Windows smoke test =="
@@ -57,6 +57,15 @@ x86_64-w64-mingw32-gcc \
   -s \
   -o "$SMOKE_DIR/SmokeHelper.exe" \
   "$FIXTURE_DIR/smoke-helper.c"
+
+x86_64-w64-mingw32-gcc \
+  -O2 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -s \
+  -o "$SMOKE_DIR/WindowTool.exe" \
+  "$FIXTURE_DIR/window-helper.c"
 
 cp "$SMOKE_DIR/SmokeHelper.exe" "$SMOKE_DIR/SmokeGame.exe"
 cp "$SMOKE_DIR/SmokeHelper.exe" "$SMOKE_DIR/SmokeTool.exe"
@@ -94,6 +103,10 @@ echo "== Recorded events =="
 cat smoke-events.normalized.txt
 
 expected_events=(
+  "impostor-start"
+  "impostor-window"
+  "scoped-start"
+  "scoped-window"
   "before-cmd:before-cmd-arg"
   "game-start"
   "after-bat:after-bat-arg"
@@ -115,6 +128,21 @@ if (( missing != 0 )); then
   exit 1
 fi
 
+impostor_window_line="$(grep -nF -m 1 -x "impostor-window" smoke-events.normalized.txt | cut -d: -f1)"
+scoped_start_line="$(grep -nF -m 1 -x "scoped-start" smoke-events.normalized.txt | cut -d: -f1)"
+scoped_window_line="$(grep -nF -m 1 -x "scoped-window" smoke-events.normalized.txt | cut -d: -f1)"
+game_start_line="$(grep -nF -m 1 -x "game-start" smoke-events.normalized.txt | cut -d: -f1)"
+
+if [[ -z "$impostor_window_line" || -z "$scoped_start_line" || "$impostor_window_line" -ge "$scoped_start_line" ]]; then
+  echo "The competing same-title window was not ready before the scoped tool started." >&2
+  exit 1
+fi
+
+if [[ -z "$scoped_window_line" || -z "$game_start_line" || "$scoped_window_line" -ge "$game_start_line" ]]; then
+  echo "Game started before the launched tool's own matching window appeared." >&2
+  exit 1
+fi
+
 if [[ ! -f Tandem.log ]]; then
   echo "Smoke test did not create Tandem.log." >&2
   exit 1
@@ -122,6 +150,11 @@ fi
 
 if ! grep -Fq "Game exited with status: exit code: 0" Tandem.log; then
   echo "Game did not exit successfully according to Tandem.log." >&2
+  exit 1
+fi
+
+if ! grep -Fq 'Preparation step 1 for Scoped Window Tool completed: matched window "Shared Trainer Window".' Tandem.log; then
+  echo "Scoped Window Tool preparation did not complete according to Tandem.log." >&2
   exit 1
 fi
 

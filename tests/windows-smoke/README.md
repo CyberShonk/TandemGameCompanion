@@ -10,6 +10,7 @@ The test covers:
 - EXE companion-tool launching.
 - BAT and CMD companion-tool launching with validated arguments.
 - Paths containing spaces.
+- PID-scoped visible-window preparation with a same-title competing process.
 - Tandem remaining alive until the game exits.
 - Successful child-process exit statuses.
 - Guardian lifetime and nonzero exit preservation after a simulated worker failure.

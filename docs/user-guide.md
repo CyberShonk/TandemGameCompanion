@@ -87,6 +87,31 @@ close_when_game_exits = true
 
 This starts the tool two seconds after the game process starts.
 
+### Wait for a trainer window before continuing
+
+```toml
+[[tools]]
+name = "Trainer"
+path = "Tools/Trainer.exe"
+arguments = []
+working_directory = "Tools"
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Trainer"
+timeout_ms = 10000
+```
+
+Tandem waits until the directly launched trainer process owns a visible top-level window with a
+matching title. A matching title from another process is ignored. This action only detects the
+window; it does not focus, move, click, or send input to it.
+
+Preparation recipes currently require a directly launched EXE or COM tool. BAT/CMD wrappers and
+launchers that exit after creating a separate GUI process are outside the direct-PID boundary.
+
 ### Trainer configuration before game startup
 
 ```toml
@@ -201,7 +226,7 @@ Tandem writes `Tandem.log` beside the configuration by default. The log records:
 - the resolved configuration path;
 - tool and game launch attempts;
 - process IDs;
-- delays and wait states;
+- preparation steps, delays, and wait states;
 - exit statuses;
 - cleanup results; and
 - the final session result.

@@ -30,6 +30,10 @@ Tandem must not:
 - Program paths must resolve to files and working directories must resolve to directories.
 - Recursive Tandem launch is rejected.
 - Tool-count, argument-size, and delay limits are enforced.
+- Preparation recipes are allowlisted, count-limited, and restricted to bounded waits.
+- Window discovery accepts only visible top-level windows owned by the exact launched tool PID.
+- The current window action performs no activation, focus, input, movement, or mutation.
+- Window preparation rejects BAT/CMD wrappers and does not follow descendant processes.
 - Existing log targets and parent directories are canonicalized to stop symlink or junction
   escapes.
 - Dangling log links are rejected.

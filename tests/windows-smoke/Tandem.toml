@@ -17,6 +17,43 @@ arguments = [
 working_directory = "."
 
 [[tools]]
+name = "Impostor Window Tool"
+path = "WindowTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "impostor",
+  "Shared Trainer Window",
+  "0",
+  "10000"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools]]
+name = "Scoped Window Tool"
+path = "WindowTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "scoped",
+  "Shared Trainer Window",
+  "750",
+  "10000"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 2000
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Shared Trainer Window"
+timeout_ms = 5000
+
+[[tools]]
 name = "Before CMD Tool"
 path = "BeforeTool.cmd"
 arguments = ["before-cmd-arg"]

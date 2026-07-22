@@ -1,3 +1,4 @@
+use crate::config::WindowTitleMatcher;
 use crate::error::AppError;
 
 #[cfg(windows)]
@@ -188,4 +189,83 @@ pub fn confirm_before_game(tool_name: &str) -> Result<bool, AppError> {
     }
 
     Ok(!response.trim().eq_ignore_ascii_case("cancel"))
+}
+
+#[cfg(windows)]
+pub fn find_top_level_window(
+    pid: u32,
+    matcher: &WindowTitleMatcher,
+) -> Result<Option<String>, AppError> {
+    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+    };
+    use windows::core::BOOL;
+
+    struct SearchContext {
+        pid: u32,
+        matcher: *const WindowTitleMatcher,
+        matched_title: Option<String>,
+    }
+
+    unsafe extern "system" fn inspect_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        // SAFETY: EnumWindows invokes this callback synchronously while the SearchContext passed
+        // through LPARAM remains alive and exclusively borrowed by find_top_level_window.
+        let context = unsafe { &mut *(lparam.0 as *mut SearchContext) };
+
+        if context.matched_title.is_some() || !unsafe { IsWindowVisible(hwnd) }.as_bool() {
+            return BOOL(1);
+        }
+
+        let mut window_pid = 0;
+        let _ = unsafe { GetWindowThreadProcessId(hwnd, Some(&mut window_pid)) };
+        if window_pid != context.pid {
+            return BOOL(1);
+        }
+
+        let mut buffer = [0_u16; 1024];
+        let length = unsafe { GetWindowTextW(hwnd, &mut buffer) };
+        if length <= 0 {
+            return BOOL(1);
+        }
+
+        let title = String::from_utf16_lossy(&buffer[..length as usize]);
+        // SAFETY: matcher points to the borrowed matcher that remains alive for the synchronous
+        // EnumWindows call.
+        let matcher = unsafe { &*context.matcher };
+        if matcher.matches(&title) {
+            context.matched_title = Some(title);
+        }
+
+        BOOL(1)
+    }
+
+    let mut context = SearchContext {
+        pid,
+        matcher,
+        matched_title: None,
+    };
+    let context_pointer = &mut context as *mut SearchContext;
+
+    // SAFETY: inspect_window has the required system callback ABI. EnumWindows is synchronous,
+    // and context_pointer remains valid and uniquely borrowed until enumeration completes.
+    unsafe { EnumWindows(Some(inspect_window), LPARAM(context_pointer as isize)) }.map_err(
+        |source| {
+            AppError::runtime(format!(
+                "could not enumerate top-level windows for companion process {pid}: {source}"
+            ))
+        },
+    )?;
+
+    Ok(context.matched_title)
+}
+
+#[cfg(not(windows))]
+pub fn find_top_level_window(
+    _pid: u32,
+    _matcher: &WindowTitleMatcher,
+) -> Result<Option<String>, AppError> {
+    Err(AppError::runtime(
+        "wait-for-window preparation is only available in Windows builds",
+    ))
 }

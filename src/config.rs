@@ -7,8 +7,12 @@ use crate::error::AppError;
 
 const SUPPORTED_CONFIG_VERSION: u32 = 1;
 const MAX_TOOLS: usize = 32;
+const MAX_PREPARATION_STEPS: usize = 16;
 const MAX_DELAY_MS: u64 = 600_000;
+const MAX_WINDOW_WAIT_MS: u64 = 120_000;
+const MAX_WINDOW_TITLE_CHARS: usize = 256;
 const MAX_ARGUMENT_BYTES: usize = 16 * 1024;
+const DEFAULT_WINDOW_WAIT_TIMEOUT_MS: u64 = 10_000;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -66,6 +70,19 @@ pub struct ToolConfig {
     pub required: bool,
     #[serde(default)]
     pub close_when_game_exits: bool,
+    #[serde(default)]
+    pub prepare: Vec<PreparationStepConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(tag = "action", rename_all = "kebab-case")]
+pub enum PreparationStepConfig {
+    WaitForWindow {
+        title_equals: Option<String>,
+        title_contains: Option<String>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
@@ -110,6 +127,53 @@ pub struct ResolvedTool {
     pub delay_ms: u64,
     pub required: bool,
     pub close_when_game_exits: bool,
+    pub prepare: Vec<PreparationStep>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PreparationStep {
+    WaitForWindow {
+        matcher: WindowTitleMatcher,
+        timeout_ms: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WindowTitleMatcher {
+    Equals(String),
+    Contains(String),
+}
+
+impl WindowTitleMatcher {
+    #[cfg(any(windows, test))]
+    pub fn matches(&self, title: &str) -> bool {
+        match self {
+            Self::Equals(expected) => title == expected,
+            Self::Contains(fragment) => title.contains(fragment),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        match self {
+            Self::Equals(expected) => format!("title equals {expected:?}"),
+            Self::Contains(fragment) => format!("title contains {fragment:?}"),
+        }
+    }
+}
+
+impl PreparationStep {
+    pub fn description(&self) -> String {
+        match self {
+            Self::WaitForWindow {
+                matcher,
+                timeout_ms,
+            } => format!(
+                "wait-for-window ({}; timeout={}ms)",
+                matcher.description(),
+                timeout_ms
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -187,6 +251,29 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
             ));
         }
 
+        if tool.prepare.len() > MAX_PREPARATION_STEPS {
+            problems.push(format!(
+                "tool {} may not define more than {MAX_PREPARATION_STEPS} preparation steps",
+                tool.name
+            ));
+        }
+
+        if !tool.prepare.is_empty() && tool.launch != LaunchTiming::BeforeGame {
+            problems.push(format!(
+                "tool {} preparation requires launch = \"before-game\"",
+                tool.name
+            ));
+        }
+
+        let prepare: Vec<PreparationStep> = tool
+            .prepare
+            .iter()
+            .enumerate()
+            .filter_map(|(step_index, step)| {
+                resolve_preparation_step(&tool.name, step_index, step, &mut problems)
+            })
+            .collect();
+
         let label = format!("tool {} ({})", index + 1, tool.name);
         if let Some(program) = resolve_program(
             &label,
@@ -200,6 +287,13 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
             config.launcher.allow_external_paths,
             &mut problems,
         ) {
+            if !prepare.is_empty() && is_windows_script(&program.path) {
+                problems.push(format!(
+                    "tool {} preparation requires a directly launched EXE or COM file",
+                    tool.name
+                ));
+            }
+
             tools.push(ResolvedTool {
                 program,
                 launch: tool.launch,
@@ -207,6 +301,7 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
                 delay_ms: tool.delay_ms,
                 required: tool.required,
                 close_when_game_exits: tool.close_when_game_exits,
+                prepare,
             });
         }
     }
@@ -261,6 +356,96 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
         game,
         tools,
     })
+}
+
+fn resolve_preparation_step(
+    tool_name: &str,
+    step_index: usize,
+    step: &PreparationStepConfig,
+    problems: &mut Vec<String>,
+) -> Option<PreparationStep> {
+    match step {
+        PreparationStepConfig::WaitForWindow {
+            title_equals,
+            title_contains,
+            timeout_ms,
+        } => {
+            let label = format!("tool {tool_name} preparation step {}", step_index + 1);
+
+            if !(1..=MAX_WINDOW_WAIT_MS).contains(timeout_ms) {
+                problems.push(format!(
+                    "{label} timeout_ms must be between 1 and {MAX_WINDOW_WAIT_MS}"
+                ));
+            }
+
+            let matcher = match (title_equals, title_contains) {
+                (Some(_), Some(_)) => {
+                    problems.push(format!(
+                        "{label} must define exactly one of title_equals or title_contains"
+                    ));
+                    None
+                }
+                (None, None) => {
+                    problems.push(format!(
+                        "{label} must define exactly one of title_equals or title_contains"
+                    ));
+                    None
+                }
+                (Some(value), None) => validate_window_title_matcher(
+                    &label,
+                    "title_equals",
+                    value,
+                    WindowTitleMatcher::Equals,
+                    problems,
+                ),
+                (None, Some(value)) => validate_window_title_matcher(
+                    &label,
+                    "title_contains",
+                    value,
+                    WindowTitleMatcher::Contains,
+                    problems,
+                ),
+            };
+
+            if !(1..=MAX_WINDOW_WAIT_MS).contains(timeout_ms) {
+                return None;
+            }
+
+            matcher.map(|matcher| PreparationStep::WaitForWindow {
+                matcher,
+                timeout_ms: *timeout_ms,
+            })
+        }
+    }
+}
+
+fn validate_window_title_matcher(
+    label: &str,
+    field: &str,
+    value: &str,
+    build: impl FnOnce(String) -> WindowTitleMatcher,
+    problems: &mut Vec<String>,
+) -> Option<WindowTitleMatcher> {
+    if value.trim().is_empty() {
+        problems.push(format!("{label} {field} may not be empty"));
+        return None;
+    }
+
+    if value.chars().any(char::is_control) {
+        problems.push(format!(
+            "{label} {field} may not contain control characters"
+        ));
+        return None;
+    }
+
+    if value.chars().count() > MAX_WINDOW_TITLE_CHARS {
+        problems.push(format!(
+            "{label} {field} exceeds the {MAX_WINDOW_TITLE_CHARS}-character limit"
+        ));
+        return None;
+    }
+
+    Some(build(value.to_owned()))
 }
 
 fn resolve_program(
@@ -588,11 +773,15 @@ fn default_true() -> bool {
     true
 }
 
+fn default_window_wait_timeout_ms() -> u64 {
+    DEFAULT_WINDOW_WAIT_TIMEOUT_MS
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeGameWait, Config, LaunchTiming, contains_cmd_metacharacters, is_external_syntax,
-        load_and_resolve,
+        BeforeGameWait, Config, LaunchTiming, PreparationStepConfig, WindowTitleMatcher,
+        contains_cmd_metacharacters, is_external_syntax, load_and_resolve,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -649,6 +838,7 @@ path = "Trainer.exe"
         assert_eq!(config.tools[0].launch, LaunchTiming::AfterGame);
         assert_eq!(config.tools[0].before_game_wait, BeforeGameWait::None);
         assert!(config.tools[0].enabled);
+        assert!(config.tools[0].prepare.is_empty());
     }
 
     #[test]
@@ -681,6 +871,47 @@ before_game_wait = "tool-exit"
             BeforeGameWait::UserConfirmation
         );
         assert_eq!(config.tools[1].before_game_wait, BeforeGameWait::ToolExit);
+    }
+
+    #[test]
+    fn parses_wait_for_window_preparation() {
+        let config: Config = toml::from_str(
+            r#"
+config_version = 1
+
+[game]
+name = "Demo Game"
+path = "Game.exe"
+
+[[tools]]
+name = "Trainer"
+path = "Trainer.exe"
+launch = "before-game"
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Trainer"
+"#,
+        )
+        .expect("window preparation should parse");
+
+        assert_eq!(config.tools[0].prepare.len(), 1);
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::WaitForWindow {
+                title_equals: None,
+                title_contains: Some("Trainer".into()),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+
+    #[test]
+    fn window_title_matchers_match_expected_titles() {
+        assert!(WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer"));
+        assert!(!WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer 1.0"));
+        assert!(WindowTitleMatcher::Contains("Trainer".into()).matches("Universal Trainer 1.0"));
+        assert!(!WindowTitleMatcher::Contains("trainer".into()).matches("Trainer"));
     }
 
     #[test]
@@ -740,6 +971,102 @@ before_game_wait = "tool-exit"
                 .to_string()
                 .contains("requires launch = \"before-game\"")
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_preparation_on_after_game_tools() {
+        let root = test_directory("after-game-preparation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "after-game"
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Tool"
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("after-game preparation must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("preparation requires launch = \"before-game\"")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_window_preparation_for_script_wrappers() {
+        let root = test_directory("script-window-preparation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool.cmd"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool.cmd"
+launch = "before-game"
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Tool"
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("script preparation must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("preparation requires a directly launched EXE or COM file")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_ambiguous_and_unbounded_window_preparation() {
+        let root = test_directory("invalid-window-preparation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Tool"
+title_contains = "Tool"
+timeout_ms = 120001
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config).expect_err("invalid preparation must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("exactly one of title_equals or title_contains"));
+        assert!(message.contains("timeout_ms must be between 1 and 120000"));
         let _ = fs::remove_dir_all(root);
     }
 
