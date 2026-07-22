@@ -44,13 +44,28 @@ Try:
 
 Check the final lines of `Tandem.log` for:
 
-- a required tool launch failure;
+- a required tool launch or preparation failure;
 - a required `tool-exit` utility returning nonzero;
 - cancellation of the confirmation dialog;
 - an invalid game path or working directory; or
 - a process-creation error from Windows or Wine.
 
 Use `--dry-run` to confirm the resolved game path and arguments without launching anything.
+
+## A `wait-for-window` preparation step times out
+
+Check `Tandem.log` for the configured selector, timeout, and launched PID.
+
+Possible causes:
+
+- the window title does not match exactly, including capitalization;
+- the tool opens no visible top-level window;
+- the configured timeout is too short;
+- a launcher creates the actual GUI in a different process; or
+- the tool is a BAT/CMD wrapper rather than a directly launched EXE or COM file.
+
+Use `title_contains` for a stable title fragment when the full title includes a version or status.
+Do not rely on another process with the same title; Tandem deliberately ignores it.
 
 ## A required setup utility stops the session
 

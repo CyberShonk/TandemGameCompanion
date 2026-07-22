@@ -21,7 +21,7 @@ Companion.
 | Document | Purpose |
 |---|---|
 | [User Guide](user-guide.md) | Normal installation, configuration, and launch path |
-| [Configuration Reference](CONFIGURATION.md) | Complete TOML schema, validation rules, and wait modes |
+| [Configuration Reference](CONFIGURATION.md) | Complete TOML schema, preparation recipes, validation rules, and wait modes |
 | [Troubleshooting](troubleshooting.md) | Common failures, log checks, and likely fixes |
 | [Windows Testing](WINDOWS_TESTING.md) | Windows build, Wine smoke test, and manual compatibility checks |
 | [Alpha Testing Guide](../packaging/TESTING-INSTRUCTIONS.md) | Instructions included in packaged alpha builds |

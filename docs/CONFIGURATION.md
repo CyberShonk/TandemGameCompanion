@@ -12,7 +12,8 @@ Start with [`Tandem.example.toml`](../Tandem.example.toml).
 ## Configuration compatibility
 
 The schema remains `config_version = 1`. Configurations created for `v0.1.0-alpha` continue to
-work because `before_game_wait` defaults to `none` when omitted.
+work because `before_game_wait` defaults to `none` and `prepare` defaults to an empty recipe
+when omitted.
 
 ## Complete example
 
@@ -41,6 +42,11 @@ before_game_wait = "user-confirmation"
 delay_ms = 0
 required = true
 close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Trainer"
+timeout_ms = 10000
 ```
 
 ## Fields
@@ -61,6 +67,42 @@ close_when_game_exits = true
 | tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
 | tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
 | tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
+| tool preparation | `action` | required | Currently `wait-for-window` |
+| tool preparation | `title_equals` | unset | Exact case-sensitive window-title match |
+| tool preparation | `title_contains` | unset | Case-sensitive window-title substring match |
+| tool preparation | `timeout_ms` | `10000` | Bounded window wait from 1 to 120,000 ms |
+
+## Tool preparation recipes
+
+Preparation steps run sequentially after a before-game tool process starts and before
+`before_game_wait` is evaluated. Preparation is only valid with `launch = "before-game"`.
+
+### `wait-for-window`
+
+```toml
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Trainer"
+timeout_ms = 10000
+```
+
+Each step must define exactly one selector:
+
+- `title_equals` matches the complete title.
+- `title_contains` matches a substring.
+
+Matching is case-sensitive and applies only to visible top-level windows owned by the exact PID
+Tandem launched. A same-title window owned by another process is ignored. Tandem does not focus,
+activate, move, click, send input to, or otherwise mutate the matched window.
+
+A required tool or a globally strict optional-tool policy fails the session when preparation times
+out, the tool exits before a match appears, or window enumeration fails. With
+`continue_on_optional_tool_failure = true`, Tandem logs the failure, terminates the directly
+launched optional tool, skips its remaining preparation and wait behavior, and continues without it.
+
+Preparation requires a directly launched EXE or COM tool. BAT/CMD entries are rejected because the
+direct child would be `cmd.exe`. The current process boundary also does not follow child processes,
+so a launcher that exits and creates a separate GUI process cannot be matched by this first action.
 
 ## Before-game wait modes
 
@@ -179,6 +221,9 @@ There is no free-form shell-command field.
 ## Limits
 
 - 32 configured tools
+- 16 preparation steps per tool
+- 256 non-control characters per window-title selector
+- 2-minute maximum window wait
 - 16 KiB combined argument text per program
 - 10-minute maximum tool delay
 - configuration version `1`

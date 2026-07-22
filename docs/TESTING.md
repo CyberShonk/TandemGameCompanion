@@ -23,7 +23,8 @@ Unit tests cover:
 
 - CLI parsing;
 - TOML defaults;
-- wait-mode validation;
+- wait-mode and preparation-recipe validation;
+- title-matcher behavior;
 - path and file-type validation;
 - log escape and overlap protection;
 - guardian protocol parsing;
@@ -36,7 +37,7 @@ Lifecycle integration tests cover:
 - user-confirmation waiting;
 - tool-exit waiting;
 - required-tool failure;
-- cleanup after an early game-launch failure;
+- cleanup after a required preparation failure or early game-launch failure;
 - persistent tools;
 - game exit during a delayed launch;
 - child guardian-protocol spoof output; and
@@ -75,9 +76,10 @@ The smoke harness:
 4. compiles a small Windows helper;
 5. exercises EXE, BAT, and CMD launch paths;
 6. verifies BAT/CMD arguments;
-7. checks before-game and after-game ordering;
-8. confirms logged exit statuses; and
-9. simulates worker failure after game startup to verify guardian lifetime and exit status.
+7. verifies PID-scoped window readiness despite a same-title window from another process;
+8. checks before-game and after-game ordering;
+9. confirms logged preparation and exit statuses; and
+10. simulates worker failure after game startup to verify guardian lifetime and exit status.
 
 See [Windows Testing](WINDOWS_TESTING.md) for prerequisites.
 

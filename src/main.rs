@@ -4,6 +4,7 @@ mod error;
 mod guardian;
 mod launcher;
 mod platform;
+mod preparation;
 mod protocol;
 
 use std::process::ExitCode;

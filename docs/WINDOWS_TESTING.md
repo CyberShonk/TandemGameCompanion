@@ -50,6 +50,7 @@ A successful run covers:
 - release compilation;
 - EXE, BAT, and CMD launch paths;
 - BAT/CMD argument preservation;
+- PID-scoped `wait-for-window` preparation with a competing same-title window;
 - before-game `tool-exit` waiting;
 - after-game delays;
 - launch ordering;
@@ -63,6 +64,7 @@ The command should exit with status `0`.
 Automated Wine coverage does not replace real-environment testing. Manually verify:
 
 - normal game launch;
+- a successful and timed-out `wait-for-window` preparation;
 - the native user-confirmation dialog;
 - touch and controller focus mapping;
 - Cancel cleanup;

@@ -8,7 +8,7 @@ use crate::config::{
     BeforeGameWait, LaunchTiming, ResolvedConfig, ResolvedProgram, ResolvedTool, is_windows_script,
 };
 use crate::error::AppError;
-use crate::{platform, protocol};
+use crate::{platform, preparation, protocol};
 
 const DELAY_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -99,6 +99,9 @@ pub fn print_plan(config: &ResolvedConfig) {
             );
             if !tool.program.arguments.is_empty() {
                 println!("    arguments: {:?}", tool.program.arguments);
+            }
+            for (index, step) in tool.prepare.iter().enumerate() {
+                println!("    prepare {}: {}", index + 1, step.description());
             }
         }
     }
@@ -235,6 +238,47 @@ fn start_before_game_tool(
     let Some(mut child) = spawn_tool(tool, continue_on_optional_failure, log)? else {
         return Ok(());
     };
+
+    for (index, step) in tool.prepare.iter().enumerate() {
+        if let Err(error) = log.line(format!(
+            "Running preparation step {} for {}: {}.",
+            index + 1,
+            tool.program.name,
+            step.description()
+        )) {
+            terminate_untracked_child(&tool.program.name, &mut child, log);
+            return Err(error);
+        }
+
+        match preparation::execute(step, &tool.program.name, &mut child) {
+            Ok(outcome) => {
+                if let Err(error) = log.line(format!(
+                    "Preparation step {} for {} completed: {}.",
+                    index + 1,
+                    tool.program.name,
+                    outcome.description()
+                )) {
+                    terminate_untracked_child(&tool.program.name, &mut child, log);
+                    return Err(error);
+                }
+            }
+            Err(error) if tool.required || !continue_on_optional_failure => {
+                terminate_child_after_preparation_failure(&tool.program.name, &mut child, log);
+                return Err(error);
+            }
+            Err(error) => {
+                if let Err(log_error) = log.line(format!(
+                    "Optional tool {} preparation failed: {error}. Continuing without this tool.",
+                    tool.program.name
+                )) {
+                    terminate_untracked_child(&tool.program.name, &mut child, log);
+                    return Err(log_error);
+                }
+                terminate_child_after_preparation_failure(&tool.program.name, &mut child, log);
+                return Ok(());
+            }
+        }
+    }
 
     match tool.before_game_wait {
         BeforeGameWait::None => {
@@ -468,6 +512,14 @@ fn build_windows_script_command(program: &ResolvedProgram) -> Result<Command, Ap
         "{} is a Windows BAT/CMD script and must be launched by a Windows Tandem build",
         program.path.display()
     )))
+}
+
+fn terminate_child_after_preparation_failure(name: &str, child: &mut Child, log: &mut SessionLog) {
+    log.best_effort_line(format!(
+        "Closing companion tool {name} after preparation failure."
+    ));
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn terminate_untracked_child(name: &str, child: &mut Child, log: &mut SessionLog) {

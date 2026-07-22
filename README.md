@@ -37,6 +37,7 @@ Tandem can:
 - launch EXE, COM, BAT, and CMD entries;
 - start tools before or after the game;
 - delay tool launches when required;
+- wait for a visible top-level window owned by a launched before-game tool;
 - pause for a native confirmation before starting the game;
 - wait for a one-shot setup utility to finish;
 - allow optional tool failures without blocking the game;
@@ -54,6 +55,7 @@ channel.
 | Workflow | Configuration |
 |---|---|
 | Start a normal companion after the game | `launch = "after-game"` |
+| Wait until a launched trainer window is ready | `[[tools.prepare]]` with `action = "wait-for-window"` |
 | Open a trainer, configure it, then continue | `before_game_wait = "user-confirmation"` |
 | Run a setup utility and wait for success | `before_game_wait = "tool-exit"` |
 | Prevent the game from starting without a tool | `required = true` |
@@ -98,6 +100,28 @@ GameFolder/
 
 Start with [`Tandem.example.toml`](Tandem.example.toml), then read the
 [configuration reference](docs/CONFIGURATION.md).
+
+### Wait for a trainer window
+
+Use a preparation step when Tandem should wait until the exact tool process it launched owns a
+visible top-level window:
+
+```toml
+[[tools]]
+name = "Trainer"
+path = "Tools/Trainer.exe"
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_contains = "Trainer"
+timeout_ms = 10000
+```
+
+Window matching is restricted to the launched tool PID. Tandem does not focus, activate, move,
+click, or otherwise modify the matched window.
 
 ### Before-game trainer confirmation
 

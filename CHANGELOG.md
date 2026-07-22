@@ -4,6 +4,18 @@ All notable changes to Tandem Game Companion are documented here.
 
 ## Unreleased
 
+### Added
+
+- Generic per-tool preparation recipes with a bounded `wait-for-window` action.
+- Process-scoped visible top-level window discovery using exact-title or title-contains matching.
+- Windows smoke coverage proving that a same-title window from another process cannot satisfy a
+  tool's preparation step.
+
+### Security
+
+- Window discovery is restricted to the exact PID Tandem launched and performs no focus, input,
+  activation, movement, or window mutation.
+
 ## [0.2.0-alpha] - 2026-06-24
 
 ### Added
