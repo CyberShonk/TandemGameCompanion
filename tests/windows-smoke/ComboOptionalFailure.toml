@@ -1,0 +1,36 @@
+config_version = 1
+
+[launcher]
+log_file = "ComboOptionalFailure.log"
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Optional Combo Failure Game"
+path = "SmokeGame.exe"
+arguments = ["combo-optional-events.txt", "combo-optional-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Optional Out-of-range Combo Tool"
+path = "ComboTool.exe"
+arguments = [
+  "combo-optional-events.txt",
+  "out-of-range",
+  "Optional Out-of-range Combo Trainer",
+  "1001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+required = false
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Optional Out-of-range Combo Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 99
+timeout_ms = 350

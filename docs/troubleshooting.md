@@ -81,6 +81,18 @@ Standard controls expose class names such as `ComboBox` or `Button`. Custom-draw
 expose a normal descendant control and cannot be detected by this action. Tandem does not inspect
 control text, use UI Automation, or match images.
 
+## A `select-combo-box-index` preparation step fails
+
+Check the deterministic selector, requested index, prior/resulting index, and failure reason in
+`Tandem.log`. The parent must be unambiguous, the descendant must be visible and enabled, the actual
+runtime class must be exactly `ComboBox`, the numeric ID must fit the standard `WM_COMMAND` control
+ID field, and the item count must include the zero-based requested index.
+
+An unavailable index is polled only until the configured bounded timeout. Tandem does not match item
+text, open the list, focus the control, send input, or support custom-drawn ComboBoxes. A tool that
+exits and leaves its GUI in another process is outside the direct-PID boundary. An already-selected
+index is successful without mutation or parent notification.
+
 ## A required setup utility stops the session
 
 With:

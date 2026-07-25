@@ -76,6 +76,15 @@ x86_64-w64-mingw32-gcc \
   -o "$SMOKE_DIR/ControlTool.exe" \
   "$FIXTURE_DIR/control-helper.c"
 
+x86_64-w64-mingw32-gcc \
+  -O2 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -s \
+  -o "$SMOKE_DIR/ComboTool.exe" \
+  "$FIXTURE_DIR/combo-helper.c"
+
 cp "$SMOKE_DIR/SmokeHelper.exe" "$SMOKE_DIR/SmokeGame.exe"
 cp "$SMOKE_DIR/SmokeHelper.exe" "$SMOKE_DIR/SmokeTool.exe"
 
@@ -86,6 +95,14 @@ cp "$FIXTURE_DIR/Guardian.toml" "$SMOKE_DIR/"
 cp "$FIXTURE_DIR/ControlExit.toml" "$SMOKE_DIR/"
 cp "$FIXTURE_DIR/ControlRequiredTimeout.toml" "$SMOKE_DIR/"
 cp "$FIXTURE_DIR/ControlOptionalTimeout.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboOutOfRange.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboOptionalFailure.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboExit.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboAmbiguousParent.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboAmbiguousControl.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboWrongRuntimeClass.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboInvalidRecipes.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/ComboInvalidIndexType.toml" "$SMOKE_DIR/"
 
 cd "$SMOKE_DIR"
 
@@ -127,6 +144,22 @@ expected_events=(
   "scoped-control-other-window-ready"
   "scoped-control-visible-disabled"
   "scoped-control-visible-enabled"
+  "combo-impostor-start"
+  "combo-impostor-ready-index-0"
+  "combo-scoped-start"
+  "combo-selector-decoys-ready"
+  "combo-target-hidden-index-0"
+  "combo-other-window-ready-index-0"
+  "combo-target-visible-disabled-index-0"
+  "combo-target-visible-enabled-index-0"
+  "combo-target-index-2"
+  "combo-target-notification-index-2"
+  "combo-correct-id-wrong-class-unchanged"
+  "combo-correct-class-wrong-id-index-0"
+  "combo-other-window-index-0"
+  "combo-other-process-final-index-0"
+  "combo-noop-ready-index-2"
+  "combo-noop-final-index-2-no-notification"
   "before-cmd:before-cmd-arg"
   "game-start"
   "after-bat:after-bat-arg"
@@ -145,6 +178,12 @@ done
 
 if (( missing != 0 )); then
   echo "Windows smoke test failed." >&2
+  exit 1
+fi
+
+if grep -Fq "VIOLATION-" smoke-events.normalized.txt; then
+  echo "Combo-box smoke fixture recorded an unintended mutation or notification." >&2
+  grep -F "VIOLATION-" smoke-events.normalized.txt >&2
   exit 1
 fi
 
@@ -201,6 +240,33 @@ if [[ -z "$enabled_control_line" || -z "$game_start_line" || "$enabled_control_l
   exit 1
 fi
 
+combo_hidden_line="$(grep -nF -m 1 -x "combo-target-hidden-index-0" smoke-events.normalized.txt | cut -d: -f1)"
+combo_disabled_line="$(grep -nF -m 1 -x "combo-target-visible-disabled-index-0" smoke-events.normalized.txt | cut -d: -f1)"
+combo_enabled_line="$(grep -nF -m 1 -x "combo-target-visible-enabled-index-0" smoke-events.normalized.txt | cut -d: -f1)"
+combo_selected_line="$(grep -nF -m 1 -x "combo-target-index-2" smoke-events.normalized.txt | cut -d: -f1)"
+combo_notification_line="$(grep -nF -m 1 -x "combo-target-notification-index-2" smoke-events.normalized.txt | cut -d: -f1)"
+combo_noop_final_line="$(grep -nF -m 1 -x "combo-noop-final-index-2-no-notification" smoke-events.normalized.txt | cut -d: -f1)"
+
+if [[ -z "$combo_hidden_line" || -z "$combo_disabled_line" || "$combo_hidden_line" -ge "$combo_disabled_line" ]]; then
+  echo "The ComboBox target was not proven unchanged while hidden." >&2
+  exit 1
+fi
+
+if [[ -z "$combo_enabled_line" || -z "$combo_selected_line" || "$combo_enabled_line" -ge "$combo_selected_line" ]]; then
+  echo "The ComboBox was selected before it became visible and enabled." >&2
+  exit 1
+fi
+
+if [[ -z "$combo_selected_line" || -z "$combo_notification_line" || -z "$combo_noop_final_line" || -z "$game_start_line" ]]; then
+  echo "ComboBox selection, notification, no-op, or game-start evidence is incomplete." >&2
+  exit 1
+fi
+
+if [[ "$combo_selected_line" -ge "$game_start_line" || "$combo_notification_line" -ge "$game_start_line" || "$combo_noop_final_line" -ge "$game_start_line" ]]; then
+  echo "Game started before ComboBox selection, notification, and no-op verification completed." >&2
+  exit 1
+fi
+
 if [[ ! -f Tandem.log ]]; then
   echo "Smoke test did not create Tandem.log." >&2
   exit 1
@@ -223,6 +289,16 @@ fi
 
 if ! grep -Fq 'Preparation step 2 for Scoped Control Tool completed: matched visible enabled control ID 1001 with class "ComboBox" in window "Scoped Trainer Controls".' Tandem.log; then
   echo "Scoped Control Tool wait-for-control preparation did not complete according to Tandem.log." >&2
+  exit 1
+fi
+
+if ! grep -Fq 'Preparation step 3 for Scoped Combo Tool completed: selected standard Win32 ComboBox in window "Scoped Combo Trainer" with selector control ID 1001 and runtime class "ComboBox": requested index 2, prior index 0, resulting index 2, sent one WM_COMMAND/CBN_SELCHANGE notification.' Tandem.log; then
+  echo "Scoped Combo Tool selection was not verified according to Tandem.log." >&2
+  exit 1
+fi
+
+if ! grep -Fq 'Preparation step 1 for Combo No-op Tool completed: selected standard Win32 ComboBox in window "Already Selected Combo Trainer" with selector control ID 1002 and runtime class "ComboBox": requested index 2, prior index 2, resulting index 2, no notification; requested index was already selected.' Tandem.log; then
+  echo "Combo No-op Tool did not follow the documented no-op policy." >&2
   exit 1
 fi
 
@@ -336,6 +412,178 @@ fi
 
 echo
 echo "Control failure-path smoke tests passed."
+
+echo
+echo "== Invalid ComboBox recipe validation =="
+rm -f combo-invalid-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboInvalidRecipes.toml --validate > combo-invalid-output.txt 2>&1
+combo_invalid_status=$?
+set -e
+if [[ "$combo_invalid_status" -ne 1 ]]; then
+  echo "Invalid ComboBox recipe validation returned $combo_invalid_status instead of 1." >&2
+  cat combo-invalid-output.txt >&2
+  exit 1
+fi
+for expected in \
+  "must define exactly one of window_title_equals or window_title_contains" \
+  "must define control_id for deterministic ComboBox parent notification" \
+  "selected_index must be between 0 and 1000000" \
+  "must define selected_index" \
+  "timeout_ms must be between 1 and 120000" \
+  "preparation requires launch = \"before-game\"" \
+  "preparation requires a directly launched EXE or COM file"; do
+  if ! grep -Fq "$expected" combo-invalid-output.txt; then
+    echo "Invalid ComboBox recipe validation did not report: $expected" >&2
+    cat combo-invalid-output.txt >&2
+    exit 1
+  fi
+done
+
+echo
+echo "== Invalid ComboBox index type validation =="
+rm -f combo-invalid-type-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboInvalidIndexType.toml --validate > combo-invalid-type-output.txt 2>&1
+combo_invalid_type_status=$?
+set -e
+if [[ "$combo_invalid_type_status" -ne 1 ]] \
+  || ! grep -Fq "could not parse configuration" combo-invalid-type-output.txt \
+  || ! grep -Fq "ComboInvalidIndexType.toml" combo-invalid-type-output.txt \
+  || ! grep -Fq 'invalid type: string "two", expected i64' combo-invalid-type-output.txt; then
+  echo "Invalid ComboBox selected_index type was not rejected during TOML parsing." >&2
+  cat combo-invalid-type-output.txt >&2
+  exit 1
+fi
+
+echo
+echo "== Required out-of-range ComboBox failure =="
+rm -f ComboOutOfRange.log combo-out-of-range-events.txt combo-out-of-range-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboOutOfRange.toml > combo-out-of-range-output.txt 2>&1
+combo_range_status=$?
+set -e
+if [[ "$combo_range_status" -ne 1 ]]; then
+  echo "Out-of-range ComboBox test returned $combo_range_status instead of 1." >&2
+  cat combo-out-of-range-output.txt >&2
+  exit 1
+fi
+if grep -Fq "VIOLATION-" combo-out-of-range-events.txt 2>/dev/null; then
+  echo "Out-of-range ComboBox test mutated or notified the fixture." >&2
+  cat combo-out-of-range-events.txt >&2
+  exit 1
+fi
+if ! grep -Fq "combo-out-of-range-still-index-0" combo-out-of-range-events.txt; then
+  echo "Out-of-range ComboBox test did not prove the selection remained unchanged." >&2
+  exit 1
+fi
+if grep -Fq "combo-out-of-range-game-start" combo-out-of-range-events.txt; then
+  echo "Game started after required out-of-range ComboBox failure." >&2
+  exit 1
+fi
+if ! grep -Fq "requested zero-based index 3 is unavailable; current item count is 3" combo-out-of-range-output.txt; then
+  echo "Out-of-range ComboBox failure reason was not deterministic." >&2
+  cat combo-out-of-range-output.txt >&2
+  exit 1
+fi
+if ! grep -Fq "Closing companion tool Out-of-range Combo Tool after preparation failure." ComboOutOfRange.log; then
+  echo "Required out-of-range ComboBox tool was not cleaned up." >&2
+  exit 1
+fi
+
+echo
+echo "== Optional ComboBox failure continuation =="
+rm -f ComboOptionalFailure.log combo-optional-events.txt combo-optional-output.txt
+wine ./TandemGameCompanion.exe --config ComboOptionalFailure.toml > combo-optional-output.txt 2>&1
+if grep -Fq "VIOLATION-" combo-optional-events.txt 2>/dev/null; then
+  echo "Optional ComboBox failure mutated or notified the fixture." >&2
+  cat combo-optional-events.txt >&2
+  exit 1
+fi
+if ! grep -Fq "combo-optional-game-start" combo-optional-events.txt; then
+  echo "Game did not start after optional ComboBox failure." >&2
+  exit 1
+fi
+if ! grep -Fq "Optional tool Optional Out-of-range Combo Tool preparation failed:" ComboOptionalFailure.log \
+  || ! grep -Fq "Continuing without this tool." ComboOptionalFailure.log \
+  || ! grep -Fq "Closing companion tool Optional Out-of-range Combo Tool after preparation failure." ComboOptionalFailure.log; then
+  echo "Optional ComboBox failure policy or cleanup was not logged." >&2
+  exit 1
+fi
+
+echo
+echo "== ComboBox tool-exit detection =="
+rm -f ComboExit.log combo-exit-events.txt combo-exit-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboExit.toml > combo-exit-output.txt 2>&1
+combo_exit_status=$?
+set -e
+if [[ "$combo_exit_status" -ne 1 ]]; then
+  echo "ComboBox exit test returned $combo_exit_status instead of 1." >&2
+  cat combo-exit-output.txt >&2
+  exit 1
+fi
+if grep -Fq "combo-exit-game-start" combo-exit-events.txt 2>/dev/null; then
+  echo "Game started after the ComboBox tool exited during preparation." >&2
+  exit 1
+fi
+if ! grep -Fq "exited before the requested ComboBox index was selected and verified" combo-exit-output.txt; then
+  echo "ComboBox exit test did not report direct-tool exit." >&2
+  cat combo-exit-output.txt >&2
+  exit 1
+fi
+
+echo
+echo "== Wrong runtime class rejection =="
+rm -f ComboWrongRuntimeClass.log combo-wrong-runtime-class-events.txt combo-wrong-runtime-class-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboWrongRuntimeClass.toml > combo-wrong-runtime-class-output.txt 2>&1
+combo_wrong_class_status=$?
+set -e
+if [[ "$combo_wrong_class_status" -ne 1 ]] \
+  || ! grep -Fq 'has unsupported runtime class "Button"; expected exactly "ComboBox"' combo-wrong-runtime-class-output.txt \
+  || grep -Fq "VIOLATION-" combo-wrong-runtime-class-events.txt 2>/dev/null \
+  || grep -Fq "combo-wrong-runtime-class-game-start" combo-wrong-runtime-class-events.txt 2>/dev/null; then
+  echo "The ID-only selector did not reject the wrong runtime class fail-closed." >&2
+  cat combo-wrong-runtime-class-output.txt >&2
+  exit 1
+fi
+if ! grep -Fq "Closing companion tool Wrong Runtime Class Tool after preparation failure." ComboWrongRuntimeClass.log; then
+  echo "Wrong-runtime-class tool was not cleaned up." >&2
+  exit 1
+fi
+
+echo
+echo "== Ambiguous ComboBox parent rejection =="
+rm -f ComboAmbiguousParent.log combo-ambiguous-parent-events.txt combo-ambiguous-parent-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboAmbiguousParent.toml > combo-ambiguous-parent-output.txt 2>&1
+combo_parent_status=$?
+set -e
+if [[ "$combo_parent_status" -ne 1 ]] \
+  || ! grep -Fq "ambiguous parent window selector" combo-ambiguous-parent-output.txt \
+  || grep -Fq "combo-ambiguous-parent-game-start" combo-ambiguous-parent-events.txt 2>/dev/null; then
+  echo "Ambiguous ComboBox parent was not rejected fail-closed." >&2
+  cat combo-ambiguous-parent-output.txt >&2
+  exit 1
+fi
+
+echo
+echo "== Ambiguous ComboBox control rejection =="
+rm -f ComboAmbiguousControl.log combo-ambiguous-control-events.txt combo-ambiguous-control-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config ComboAmbiguousControl.toml > combo-ambiguous-control-output.txt 2>&1
+combo_control_status=$?
+set -e
+if [[ "$combo_control_status" -ne 1 ]] \
+  || ! grep -Fq "ambiguous control selector" combo-ambiguous-control-output.txt \
+  || grep -Fq "combo-ambiguous-control-game-start" combo-ambiguous-control-events.txt 2>/dev/null; then
+  echo "Ambiguous ComboBox control was not rejected fail-closed." >&2
+  cat combo-ambiguous-control-output.txt >&2
+  exit 1
+fi
+
+echo "ComboBox selection and failure-path smoke tests passed."
 
 
 echo

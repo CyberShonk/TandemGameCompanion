@@ -1,0 +1,73 @@
+config_version = 1
+
+[game]
+name = "Invalid Recipe Game"
+path = "SmokeGame.exe"
+working_directory = "."
+
+[[tools]]
+name = "Ambiguous Recipe Tool"
+path = "ComboTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+selected_index = 2
+
+[[tools]]
+name = "Invalid Index Tool"
+path = "ComboTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = -1
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = 1000001
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+
+[[tools]]
+name = "Invalid Timeout Tool"
+path = "ComboTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = 2
+timeout_ms = 0
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = 2
+timeout_ms = 120001
+
+[[tools]]
+name = "After-game Preparation Tool"
+path = "ComboTool.exe"
+launch = "after-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = 2
+
+[[tools]]
+name = "CMD Wrapper Preparation Tool"
+path = "BeforeTool.cmd"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = 2

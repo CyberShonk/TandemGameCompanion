@@ -15,12 +15,19 @@ All notable changes to Tandem Game Companion are documented here.
   semantics.
 - Windows smoke coverage for other-process, other-top-level-window, hidden, disabled, and partial
   ID/class control false matches.
+- Process-scoped `select-combo-box-index` preparation for a standard visible, enabled Win32
+  `ComboBox`, using zero-based numeric indices, bounded documented messages, result verification,
+  and the minimum standard parent selection-change notification.
+- Wine smoke coverage for mutation scoping, no-op behavior, out-of-range rejection, ambiguity,
+  tool exit, required/optional policy, cleanup, and unchanged wait/guardian behavior.
 
 ### Security
 
-- Window and control discovery are restricted to the exact PID Tandem launched. Control discovery
-  remains under the selected parent top-level window and performs no text reading, focus, input,
-  activation, option selection, invocation, UI Automation, image matching, or mutation.
+- Window and control discovery are restricted to the exact PID Tandem launched. The only control
+  mutation is allowlisted standard ComboBox selection by numeric index with runtime-class, item-count,
+  before/after result, ambiguity, timeout, and parent-notification checks. Text matching, focus,
+  activation, input, arbitrary messages, other control mutations, UI Automation, and image matching
+  remain excluded.
 
 ## [0.2.0-alpha] - 2026-06-24
 

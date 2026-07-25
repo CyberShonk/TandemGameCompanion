@@ -36,6 +36,15 @@ control_class_equals = "ComboBox"
 control_id = 1001
 timeout_ms = 10000
 
+# Select the third item in that standard ComboBox, then verify the result.
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 10000
+
 # Run a one-shot setup utility and launch the game only after it exits successfully.
 [[tools]]
 name = "Setup Utility"

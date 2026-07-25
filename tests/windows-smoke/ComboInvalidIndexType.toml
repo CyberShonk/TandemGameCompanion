@@ -1,0 +1,17 @@
+config_version = 1
+
+[game]
+name = "Invalid Index Type Game"
+path = "SmokeGame.exe"
+working_directory = "."
+
+[[tools]]
+name = "Invalid Index Type Tool"
+path = "ComboTool.exe"
+launch = "before-game"
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Trainer"
+control_id = 1001
+selected_index = "two"

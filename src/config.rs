@@ -12,6 +12,7 @@ const MAX_DELAY_MS: u64 = 600_000;
 const MAX_WINDOW_WAIT_MS: u64 = 120_000;
 const MAX_WINDOW_TITLE_CHARS: usize = 256;
 const MAX_CONTROL_CLASS_CHARS: usize = 256;
+const MAX_COMBO_BOX_INDEX: i64 = 1_000_000;
 const MAX_ARGUMENT_BYTES: usize = 16 * 1024;
 const DEFAULT_WINDOW_WAIT_TIMEOUT_MS: u64 = 10_000;
 
@@ -92,6 +93,15 @@ pub enum PreparationStepConfig {
         #[serde(default = "default_window_wait_timeout_ms")]
         timeout_ms: u64,
     },
+    SelectComboBoxIndex {
+        window_title_equals: Option<String>,
+        window_title_contains: Option<String>,
+        control_id: Option<u32>,
+        control_class_equals: Option<String>,
+        selected_index: Option<i64>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
@@ -148,6 +158,12 @@ pub enum PreparationStep {
     WaitForControl {
         window_matcher: WindowTitleMatcher,
         control_selector: ControlSelector,
+        timeout_ms: u64,
+    },
+    SelectComboBoxIndex {
+        window_matcher: WindowTitleMatcher,
+        control_selector: ControlSelector,
+        selected_index: u32,
         timeout_ms: u64,
     },
 }
@@ -223,6 +239,18 @@ impl PreparationStep {
                 "wait-for-control (window {}; {}; visible and enabled; timeout={}ms)",
                 window_matcher.description(),
                 control_selector.description(),
+                timeout_ms
+            ),
+            Self::SelectComboBoxIndex {
+                window_matcher,
+                control_selector,
+                selected_index,
+                timeout_ms,
+            } => format!(
+                "select-combo-box-index (window {}; {}; runtime class equals \"ComboBox\"; selected index {}; visible and enabled; timeout={}ms)",
+                window_matcher.description(),
+                control_selector.description(),
+                selected_index,
                 timeout_ms
             ),
         }
@@ -499,6 +527,95 @@ fn resolve_preparation_step(
                 },
                 timeout_ms: *timeout_ms,
             })
+        }
+        PreparationStepConfig::SelectComboBoxIndex {
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            selected_index,
+            timeout_ms,
+        } => {
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let window_matcher = resolve_window_title_matcher(
+                &label,
+                "window_title_equals",
+                window_title_equals,
+                "window_title_contains",
+                window_title_contains,
+                problems,
+            );
+
+            if control_id.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id for deterministic ComboBox parent notification"
+                ));
+            }
+
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=u16::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {} for select-combo-box-index",
+                        u16::MAX
+                    ));
+                    false
+                }
+                Some(_) => true,
+                None => false,
+            };
+
+            let class_equals = control_class_equals
+                .as_ref()
+                .and_then(|value| validate_control_class(&label, value, problems));
+            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+            let supported_class = match class_equals.as_deref() {
+                Some("ComboBox") | None => true,
+                Some(_) => {
+                    problems.push(format!(
+                        "{label} control_class_equals must be exactly \"ComboBox\" for select-combo-box-index"
+                    ));
+                    false
+                }
+            };
+
+            let selected_index = match selected_index {
+                Some(index) if (0..=MAX_COMBO_BOX_INDEX).contains(index) => Some(*index as u32),
+                Some(_) => {
+                    problems.push(format!(
+                        "{label} selected_index must be between 0 and {MAX_COMBO_BOX_INDEX}"
+                    ));
+                    None
+                }
+                None => {
+                    problems.push(format!("{label} must define selected_index"));
+                    None
+                }
+            };
+
+            if !timeout_valid
+                || !control_id_valid
+                || !control_class_valid
+                || !supported_class
+                || selected_index.is_none()
+                || control_id.is_none()
+            {
+                return None;
+            }
+
+            match (window_matcher, selected_index) {
+                (Some(window_matcher), Some(selected_index)) => {
+                    Some(PreparationStep::SelectComboBoxIndex {
+                        window_matcher,
+                        control_selector: ControlSelector {
+                            id: *control_id,
+                            class_equals,
+                        },
+                        selected_index,
+                        timeout_ms: *timeout_ms,
+                    })
+                }
+                _ => None,
+            }
         }
     }
 }
@@ -1095,6 +1212,45 @@ control_id = 1001
     }
 
     #[test]
+    fn parses_select_combo_box_index_preparation() {
+        let config: Config = toml::from_str(
+            r#"
+config_version = 1
+
+[game]
+name = "Demo Game"
+path = "Game.exe"
+
+[[tools]]
+name = "Trainer"
+path = "Trainer.exe"
+launch = "before-game"
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+"#,
+        )
+        .expect("ComboBox selection preparation should parse");
+
+        assert_eq!(config.tools[0].prepare.len(), 1);
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::SelectComboBoxIndex {
+                window_title_equals: None,
+                window_title_contains: Some("Trainer".into()),
+                control_id: Some(1001),
+                control_class_equals: Some("ComboBox".into()),
+                selected_index: Some(2),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+
+    #[test]
     fn window_title_matchers_match_expected_titles() {
         assert!(WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer"));
         assert!(!WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer 1.0"));
@@ -1141,6 +1297,24 @@ control_id = 1001
         assert_eq!(
             step.description(),
             "wait-for-control (window title contains \"Trainer\"; control ID 1001 and class equals \"ComboBox\"; visible and enabled; timeout=10000ms)"
+        );
+    }
+
+    #[test]
+    fn combo_box_selection_description_is_deterministic() {
+        let step = PreparationStep::SelectComboBoxIndex {
+            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+            control_selector: ControlSelector {
+                id: Some(1001),
+                class_equals: Some("ComboBox".into()),
+            },
+            selected_index: 2,
+            timeout_ms: 10_000,
+        };
+
+        assert_eq!(
+            step.description(),
+            "select-combo-box-index (window title contains \"Trainer\"; control ID 1001 and class equals \"ComboBox\"; runtime class equals \"ComboBox\"; selected index 2; visible and enabled; timeout=10000ms)"
         );
     }
 
@@ -1416,6 +1590,111 @@ timeout_ms = 1000
             2
         );
         assert!(message.contains("control_id must be between 1 and 2147483647"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_invalid_combo_box_selection_recipes() {
+        let root = test_directory("invalid-combo-selection");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Tool"
+window_title_contains = "Tool"
+control_class_equals = "ComboBox"
+selected_index = 2
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Tool"
+control_id = 1001
+control_class_equals = "Button"
+selected_index = -1
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Tool"
+control_id = 65536
+selected_index = 1000001
+timeout_ms = 0
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Tool"
+control_id = 1001
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error =
+            load_and_resolve(&config).expect_err("invalid ComboBox recipes must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains(
+                "must define exactly one of window_title_equals or window_title_contains"
+            )
+        );
+        assert!(
+            message
+                .contains("must define control_id for deterministic ComboBox parent notification")
+        );
+        assert!(message.contains(
+            "control_class_equals must be exactly \"ComboBox\" for select-combo-box-index"
+        ));
+        assert_eq!(
+            message
+                .matches("selected_index must be between 0 and 1000000")
+                .count(),
+            2
+        );
+        assert!(
+            message.contains("control_id must be between 1 and 65535 for select-combo-box-index")
+        );
+        assert!(message.contains("timeout_ms must be between 1 and 120000"));
+        assert!(message.contains("must define selected_index"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_combo_box_selection_on_after_game_tools_and_script_wrappers() {
+        let root = test_directory("combo-selection-boundaries");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool.cmd"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool.cmd"
+launch = "after-game"
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Tool"
+control_id = 1001
+control_class_equals = "ComboBox"
+selected_index = 2
+"#,
+        )
+        .expect("configuration should be written");
+
+        let error = load_and_resolve(&config)
+            .expect_err("after-game script ComboBox preparation must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("preparation requires launch = \"before-game\""));
+        assert!(message.contains("preparation requires a directly launched EXE or COM file"));
         let _ = fs::remove_dir_all(root);
     }
 
