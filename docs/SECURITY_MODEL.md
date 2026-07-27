@@ -30,14 +30,19 @@ Tandem must not:
 - Program paths must resolve to files and working directories must resolve to directories.
 - Recursive Tandem launch is rejected.
 - Tool-count, argument-size, and delay limits are enforced.
-- Preparation recipes are allowlisted, count-limited, and restricted to bounded waits.
+- Preparation recipes are allowlisted, count-limited, and bounded; the only mutation is standard Win32 ComboBox selection by numeric index.
 - Top-level window discovery accepts only visible windows owned by the exact launched tool PID.
 - Control discovery is restricted to visible, enabled descendant HWNDs under the selected top-level
   window and owned by that same PID.
 - Control selection uses only a numeric control ID, exact Win32 class name, or both with AND
   semantics. It does not read cross-process control text.
-- Preparation performs no activation, focus, input, movement, option selection, button invocation,
-  checkbox/radio changes, UI Automation, image matching, or mutation.
+- ComboBox selection uses only documented `CB_GETCOUNT`, `CB_GETCURSEL`, and `CB_SETCURSEL`
+  messages plus one standard `WM_COMMAND`/`CBN_SELCHANGE` notification when the index changes.
+- The mutation requires one unambiguous parent and control, exact runtime class `ComboBox`, a valid
+  item count, before/after verification, and a directly launched PID.
+- Preparation performs no activation, focus, movement, keyboard or mouse input, item-text matching,
+  arbitrary messages, button invocation, checkbox/radio or edit changes, UI Automation, image
+  matching, custom-control mutation, or descendant-process following.
 - Window and control preparation reject BAT/CMD wrappers and do not follow descendant processes.
 - Existing log targets and parent directories are canonicalized to stop symlink or junction
   escapes.

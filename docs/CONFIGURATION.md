@@ -54,6 +54,14 @@ window_title_contains = "Trainer"
 control_class_equals = "ComboBox"
 control_id = 1001
 timeout_ms = 10000
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 10000
 ```
 
 ## Fields
@@ -74,13 +82,18 @@ timeout_ms = 10000
 | tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
 | tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
 | tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
-| tool preparation | `action` | required | `wait-for-window` or `wait-for-control` |
+| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, or `select-combo-box-index` |
 | `wait-for-window` | `title_equals` | unset | Exact case-sensitive top-level window-title match |
 | `wait-for-window` | `title_contains` | unset | Case-sensitive top-level window-title substring match |
 | `wait-for-control` | `window_title_equals` | unset | Exact case-sensitive parent top-level window title |
 | `wait-for-control` | `window_title_contains` | unset | Case-sensitive parent top-level window-title substring |
 | `wait-for-control` | `control_id` | unset | Numeric Win32 control ID from 1 to 2,147,483,647 |
 | `wait-for-control` | `control_class_equals` | unset | Exact case-sensitive Win32 control class name |
+| `select-combo-box-index` | `window_title_equals` | unset | Exact case-sensitive parent top-level window title |
+| `select-combo-box-index` | `window_title_contains` | unset | Case-sensitive parent title substring |
+| `select-combo-box-index` | `control_id` | required | Numeric ID from 1 to 65,535, used for discovery and `WM_COMMAND` notification |
+| `select-combo-box-index` | `control_class_equals` | unset | When present, must be exactly `ComboBox`; runtime class is always verified |
+| `select-combo-box-index` | `selected_index` | required | Zero-based item index from 0 to 1,000,000 |
 | tool preparation | `timeout_ms` | `10000` | Bounded wait from 1 to 120,000 ms |
 
 ## Tool preparation recipes
@@ -132,6 +145,38 @@ This action is intended for standard HWND-based Win32 controls. Custom-drawn int
 that do not expose a normal descendant window, numeric ID, or stable class name are outside this
 action's scope.
 
+### `select-combo-box-index`
+
+```toml
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 10000
+```
+
+The parent selector must define exactly one title matcher. `control_id` is required and is limited to
+1 through 65,535 because the standard parent notification carries the control ID in the low word of
+`WM_COMMAND`. `control_class_equals` is optional, but when present it must be exactly `ComboBox`;
+Tandem always verifies that the actual runtime class is exactly `ComboBox` before mutation.
+
+The step waits within one bounded timeout for an unambiguous visible parent, an unambiguous visible
+and enabled descendant, and an item count greater than `selected_index`. It reads `CB_GETCOUNT` and
+`CB_GETCURSEL`. When a change is required, it sends `CB_SETCURSEL`, verifies with `CB_GETCURSEL`,
+sends exactly one standard `WM_COMMAND` with `CBN_SELCHANGE` to the owning parent, and verifies the
+selected index again. Because `CB_SETCURSEL` does not itself send `CBN_SELCHANGE`, the explicit
+parent notification is required for ordinary application handling. If the requested index is already
+selected, Tandem performs no mutation and sends no notification.
+
+This is not a generic message facility. It cannot match text, use `CB_SELECTSTRING`, drop down or
+open the control, focus or activate a window, send keyboard or mouse input, invoke buttons, alter
+checkboxes/radio buttons or edit controls, use UI Automation, match images, support custom-drawn
+controls, follow descendant processes, or accept user-configurable messages. Ambiguous discovery,
+unsupported runtime class, unavailable index, message failure, verification failure, or direct tool
+exit fails the step.
+
 A required tool or a globally strict optional-tool policy fails the session when preparation times
 out, the tool exits before a match appears, or discovery reports an error. With
 `continue_on_optional_tool_failure = true`, Tandem logs the failure, terminates the directly
@@ -139,7 +184,7 @@ launched optional tool, skips its remaining preparation and wait behavior, and c
 
 Preparation requires a directly launched EXE or COM tool. BAT/CMD entries are rejected because the
 direct child would be `cmd.exe`. The current process boundary also does not follow child processes,
-so a launcher that exits and creates a separate GUI process cannot be matched by either action.
+so a launcher that exits and creates a separate GUI process cannot be matched by any preparation action.
 
 ## Before-game wait modes
 

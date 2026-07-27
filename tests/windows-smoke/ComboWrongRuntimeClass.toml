@@ -1,0 +1,34 @@
+config_version = 1
+
+[launcher]
+log_file = "ComboWrongRuntimeClass.log"
+
+[game]
+name = "Wrong Runtime Class Game"
+path = "SmokeGame.exe"
+arguments = ["combo-wrong-runtime-class-events.txt", "combo-wrong-runtime-class-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Wrong Runtime Class Tool"
+path = "ComboTool.exe"
+arguments = [
+  "combo-wrong-runtime-class-events.txt",
+  "wrong-runtime-class",
+  "Wrong Runtime Class Trainer",
+  "1001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Wrong Runtime Class Trainer"
+control_id = 1001
+selected_index = 2
+timeout_ms = 2000

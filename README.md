@@ -57,6 +57,7 @@ channel.
 | Start a normal companion after the game | `launch = "after-game"` |
 | Wait until a launched trainer window is ready | `[[tools.prepare]]` with `action = "wait-for-window"` |
 | Wait until a standard trainer control is ready | `[[tools.prepare]]` with `action = "wait-for-control"` |
+| Select a standard Win32 ComboBox item by index | `[[tools.prepare]]` with `action = "select-combo-box-index"` |
 | Open a trainer, configure it, then continue | `before_game_wait = "user-confirmation"` |
 | Run a setup utility and wait for success | `before_game_wait = "tool-exit"` |
 | Prevent the game from starting without a tool | `required = true` |
@@ -143,6 +144,29 @@ launched. When both `control_id` and `control_class_equals` are present, both mu
 does not read control text, select an option, click, focus, activate, send input, use UI Automation,
 or modify the control. Custom-drawn controls without a standard descendant HWND are not supported by
 this action.
+
+### Select a standard Win32 ComboBox item
+
+Use this narrowly scoped mutation when a directly launched before-game tool exposes a standard
+Win32 `ComboBox` and the required choice has a stable zero-based index:
+
+```toml
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 10000
+```
+
+Tandem waits for one unambiguous visible parent and one unambiguous visible, enabled descendant
+control owned by the exact launched PID. It verifies the runtime class, validates the item count,
+reads the prior index, sets and verifies the requested index, sends one standard
+`WM_COMMAND`/`CBN_SELCHANGE` parent notification when the value changed, and verifies the index
+again. An already-selected index is a no-op and sends no notification. This action does not match
+item text, open the list, focus or activate windows, send keyboard or mouse input, invoke other
+controls, use UI Automation, or support custom-drawn controls.
 
 ### Before-game trainer confirmation
 

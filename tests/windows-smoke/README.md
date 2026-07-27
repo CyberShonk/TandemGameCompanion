@@ -15,6 +15,10 @@ The test covers:
 - Process and parent-top-level-window control scoping.
 - Hidden and disabled control rejection.
 - Numeric control ID plus exact class-name AND semantics.
+- Standard ComboBox item-count, current-index, set-index, and post-notification verification.
+- Exact process, parent-window, visibility, enabled-state, ID, and runtime-class mutation scoping.
+- One standard parent selection-change notification and an already-selected no-op with none.
+- Invalid recipe, ambiguous parent/control, out-of-range, direct exit, required, and optional failures.
 - Required tool exit and timeout failures during control preparation.
 - Optional control timeout continuation and cleanup.
 - Tandem remaining alive until the game exits.

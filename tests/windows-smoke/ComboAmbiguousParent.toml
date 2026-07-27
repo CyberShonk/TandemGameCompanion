@@ -1,0 +1,35 @@
+config_version = 1
+
+[launcher]
+log_file = "ComboAmbiguousParent.log"
+
+[game]
+name = "Ambiguous Parent Game"
+path = "SmokeGame.exe"
+arguments = ["combo-ambiguous-parent-events.txt", "combo-ambiguous-parent-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Ambiguous Parent Combo Tool"
+path = "ComboTool.exe"
+arguments = [
+  "combo-ambiguous-parent-events.txt",
+  "ambiguous-parent",
+  "Ambiguous Combo Parent",
+  "1001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Ambiguous Combo Parent"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 2000

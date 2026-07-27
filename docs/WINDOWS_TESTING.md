@@ -52,9 +52,14 @@ A successful run covers:
 - BAT/CMD argument preservation;
 - PID-scoped `wait-for-window` preparation with a competing same-title window;
 - process- and parent-window-scoped `wait-for-control` preparation;
+- process-scoped standard Win32 ComboBox selection by zero-based numeric index;
 - rejection of matching controls in another process or another top-level window;
 - rejection of hidden, disabled, and partial ID/class matches;
-- sequential window and control preparation;
+- rejection of other-process, other-window, hidden, disabled, wrong-ID, and wrong-class ComboBox decoys;
+- item-count validation, current/result index verification, one `CBN_SELCHANGE` parent notification,
+  and no notification for an already-selected index;
+- invalid-recipe, ambiguity, out-of-range, direct-tool-exit, required-failure, and optional-failure paths;
+- sequential window, control, and ComboBox preparation;
 - control preparation tool-exit detection plus required and optional timeout paths;
 - before-game `tool-exit` waiting;
 - after-game delays;
@@ -71,6 +76,7 @@ Automated Wine coverage does not replace real-environment testing. Manually veri
 - normal game launch;
 - a successful and timed-out `wait-for-window` preparation;
 - successful and timed-out `wait-for-control` preparation against a real standard Win32 control;
+- `select-combo-box-index` against a real standard ComboBox, including no-op and out-of-range cases;
 - exact PID ownership, parent-window scoping, hidden/disabled filtering, and ID/class AND semantics;
 - the native user-confirmation dialog;
 - touch and controller focus mapping;

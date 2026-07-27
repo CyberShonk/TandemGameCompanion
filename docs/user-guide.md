@@ -139,6 +139,28 @@ Automation, inspect images, or otherwise mutate the tool.
 This action is limited to standard HWND-based Win32 controls with stable IDs or class names.
 Custom-drawn interfaces may not expose a compatible control.
 
+### Select a standard Win32 ComboBox index
+
+```toml
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 10000
+```
+
+`selected_index` is zero-based. Tandem waits for the exact launched process, one matching visible
+parent, one matching visible and enabled descendant, and enough standard ComboBox items. It reads
+the prior index, changes only when necessary, verifies the result, sends one standard parent
+selection-change notification for a real change, and verifies again. An already-selected index is a
+no-op with no notification.
+
+Text matching, `CB_SELECTSTRING`, arbitrary messages, list opening, focus, activation, keyboard or
+mouse input, button or checkbox/radio mutation, UI Automation, image matching, custom controls, and
+descendant-process following remain unsupported.
+
 ### Trainer configuration before game startup
 
 ```toml

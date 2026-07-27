@@ -133,3 +133,85 @@ launch = "after-game"
 delay_ms = 200
 required = true
 close_when_game_exits = false
+
+[[tools]]
+name = "Combo Impostor Tool"
+path = "ComboTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "impostor",
+  "Scoped Combo Trainer",
+  "1001",
+  "0",
+  "0",
+  "2200"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools]]
+name = "Scoped Combo Tool"
+path = "ComboTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "scoped",
+  "Scoped Combo Trainer",
+  "1001",
+  "300",
+  "300",
+  "10000"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 500
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Scoped Combo Trainer"
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_equals = "Scoped Combo Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_contains = "Scoped Combo Trainer"
+control_class_equals = "ComboBox"
+control_id = 1001
+selected_index = 2
+timeout_ms = 5000
+
+[[tools]]
+name = "Combo No-op Tool"
+path = "ComboTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "noop",
+  "Already Selected Combo Trainer",
+  "1002",
+  "0",
+  "0",
+  "700"
+]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 1500
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Already Selected Combo Trainer"
+control_id = 1002
+selected_index = 2
+timeout_ms = 5000

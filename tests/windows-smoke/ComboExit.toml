@@ -1,0 +1,27 @@
+config_version = 1
+
+[launcher]
+log_file = "ComboExit.log"
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Combo Exit Game"
+path = "SmokeGame.exe"
+arguments = ["combo-exit-events.txt", "combo-exit-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Exiting Combo Tool"
+path = "SmokeTool.exe"
+arguments = ["combo-exit-events.txt", "combo-tool-exit", "100"]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "select-combo-box-index"
+window_title_equals = "Never Created Combo Trainer"
+control_id = 1001
+selected_index = 2
+timeout_ms = 2000

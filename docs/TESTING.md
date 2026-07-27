@@ -23,7 +23,7 @@ Unit tests cover:
 
 - CLI parsing;
 - TOML defaults;
-- wait-mode and preparation-recipe validation;
+- wait-mode and preparation-recipe validation, including ComboBox index, timeout, process, and wrapper boundaries;
 - title-matcher and control-selector behavior, including ID/class AND semantics;
 - path and file-type validation;
 - log escape and overlap protection;
@@ -73,16 +73,18 @@ The smoke harness:
 1. runs Windows-target tests through Wine;
 2. builds the x86-64 Windows MSVC executable;
 3. uses an isolated Wine prefix;
-4. compiles dedicated Windows window and control helpers;
+4. compiles dedicated Windows window, control, and standard ComboBox helpers;
 5. exercises EXE, BAT, and CMD launch paths;
 6. verifies BAT/CMD arguments;
 7. verifies PID-scoped window readiness despite a same-title window from another process;
 8. verifies process- and parent-window-scoped control readiness while rejecting other-process,
    other-window, hidden, disabled, and partial ID/class matches;
-9. checks sequential preparation plus before-game and after-game ordering;
-10. verifies control tool-exit detection plus required and optional timeout policies;
-11. confirms logged preparation and exit statuses; and
-12. simulates worker failure after game startup to verify guardian lifetime and exit status.
+9. proves process-scoped, parent-scoped, visible/enabled standard ComboBox selection by numeric index;
+10. proves item-count validation, before/after verification, one parent notification, and no-op behavior;
+11. rejects ambiguous discovery and invalid recipes and exercises required, optional, timeout, and tool-exit failures;
+12. checks sequential preparation plus before-game and after-game ordering;
+13. confirms existing wait and guardian behavior; and
+14. simulates worker failure after game startup to verify guardian lifetime and exit status.
 
 See [Windows Testing](WINDOWS_TESTING.md) for prerequisites.
 
