@@ -215,3 +215,59 @@ window_title_equals = "Already Selected Combo Trainer"
 control_id = 1002
 selected_index = 2
 timeout_ms = 5000
+
+[[tools]]
+name = "Button Impostor Tool"
+path = "ButtonTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "impostor",
+  "Scoped Button Trainer",
+  "2001",
+  "0",
+  "0",
+  "2500"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools]]
+name = "Scoped Button Tool"
+path = "ButtonTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "scoped",
+  "Scoped Button Trainer",
+  "2001",
+  "300",
+  "300",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 500
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Scoped Button Trainer"
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_equals = "Scoped Button Trainer"
+control_class_equals = "Button"
+control_id = 2001
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "invoke-button"
+window_title_contains = "Scoped Button Trainer"
+control_class_equals = "Button"
+control_id = 2001
+timeout_ms = 5000

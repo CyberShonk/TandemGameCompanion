@@ -216,6 +216,21 @@ pub enum ComboBoxSelectionStatus {
     Complete(ComboBoxSelection),
 }
 
+#[derive(Debug)]
+pub struct ButtonInvocation {
+    pub window_title: String,
+    pub control_id: i32,
+    pub class_name: String,
+    pub button_style: u32,
+}
+
+#[derive(Debug)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum ButtonInvocationStatus {
+    Pending { reason: String },
+    Complete(ButtonInvocation),
+}
+
 #[cfg(windows)]
 #[derive(Clone)]
 struct MatchedWindowHandle {
@@ -697,5 +712,94 @@ pub fn select_combo_box_index(
 ) -> Result<ComboBoxSelectionStatus, AppError> {
     Err(AppError::runtime(
         "select-combo-box-index preparation is only available in Windows builds",
+    ))
+}
+
+#[cfg(windows)]
+pub fn invoke_button(
+    pid: u32,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    message_timeout_ms: u32,
+) -> Result<ButtonInvocationStatus, AppError> {
+    use std::time::{Duration, Instant};
+    use windows::Win32::UI::WindowsAndMessaging::{GWL_STYLE, GetWindowLongPtrW};
+
+    const BM_CLICK: u32 = 0x00F5;
+    const BS_TYPEMASK: u32 = 0x000F;
+    const BS_PUSHBUTTON: u32 = 0x0000;
+    const BS_DEFPUSHBUTTON: u32 = 0x0001;
+
+    let windows = matching_top_level_windows(pid, window_matcher)?;
+    let window = match windows.as_slice() {
+        [] => {
+            return Ok(ButtonInvocationStatus::Pending {
+                reason: "matching parent window is not available".into(),
+            });
+        }
+        [window] => window,
+        _ => {
+            return Err(AppError::runtime(format!(
+                "ambiguous parent window selector for companion process {pid}: {} visible top-level windows matched {}",
+                windows.len(),
+                window_matcher.description()
+            )));
+        }
+    };
+    let controls = matching_descendant_controls(window.hwnd, pid, control_selector)?;
+    let control = match controls.as_slice() {
+        [] => {
+            return Ok(ButtonInvocationStatus::Pending {
+                reason: "matching visible enabled descendant control is not available".into(),
+            });
+        }
+        [control] => control,
+        _ => {
+            return Err(AppError::runtime(format!(
+                "ambiguous control selector in window {:?}: {} visible enabled descendant controls matched {}",
+                window.title,
+                controls.len(),
+                control_selector.description()
+            )));
+        }
+    };
+    if control.class_name != "Button" {
+        return Err(AppError::runtime(format!(
+            "matched control ID {} in window {:?} has unsupported runtime class {:?}; expected exactly \"Button\"",
+            control.control_id, window.title, control.class_name
+        )));
+    }
+
+    // SAFETY: the handle was discovered from the directly launched process and remains valid for
+    // this synchronous style query. GWL_STYLE reads metadata and does not mutate the control.
+    let raw_style = unsafe { GetWindowLongPtrW(control.hwnd, GWL_STYLE) } as u32;
+    let button_style = raw_style & BS_TYPEMASK;
+    if button_style != BS_PUSHBUTTON && button_style != BS_DEFPUSHBUTTON {
+        return Err(AppError::runtime(format!(
+            "matched Button control ID {} in window {:?} has unsupported button type style 0x{button_style:04x}; invoke-button supports only BS_PUSHBUTTON and BS_DEFPUSHBUTTON",
+            control.control_id, window.title
+        )));
+    }
+
+    let deadline = Instant::now() + Duration::from_millis(u64::from(message_timeout_ms.max(1)));
+    let _ = send_bounded_window_message(control.hwnd, BM_CLICK, 0, 0, deadline, "BM_CLICK")?;
+
+    Ok(ButtonInvocationStatus::Complete(ButtonInvocation {
+        window_title: window.title.clone(),
+        control_id: control.control_id,
+        class_name: control.class_name.clone(),
+        button_style,
+    }))
+}
+
+#[cfg(not(windows))]
+pub fn invoke_button(
+    _pid: u32,
+    _window_matcher: &WindowTitleMatcher,
+    _control_selector: &ControlSelector,
+    _message_timeout_ms: u32,
+) -> Result<ButtonInvocationStatus, AppError> {
+    Err(AppError::runtime(
+        "invoke-button preparation is only available in Windows builds",
     ))
 }

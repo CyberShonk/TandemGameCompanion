@@ -67,3 +67,11 @@ launch = "after-game"
 delay_ms = 2000
 required = false
 close_when_game_exits = true
+
+# Standard Win32 push-button preparation example
+# [[tools.prepare]]
+# action = "invoke-button"
+# window_title_contains = "Trainer"
+# control_id = 1002
+# control_class_equals = "Button"
+# timeout_ms = 10000

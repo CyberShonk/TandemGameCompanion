@@ -18,16 +18,19 @@ All notable changes to Tandem Game Companion are documented here.
 - Process-scoped `select-combo-box-index` preparation for a standard visible, enabled Win32
   `ComboBox`, using zero-based numeric indices, bounded documented messages, result verification,
   and the minimum standard parent selection-change notification.
-- Wine smoke coverage for mutation scoping, no-op behavior, out-of-range rejection, ambiguity,
-  tool exit, required/optional policy, cleanup, and unchanged wait/guardian behavior.
+- Process-scoped `invoke-button` preparation for visible, enabled standard Win32 push and
+  default-push buttons, using one bounded `BM_CLICK` after runtime class and button-style checks.
+- Wine smoke coverage for ComboBox and button mutation scoping, exactly-once invocation, no-op
+  behavior, unsupported-style rejection, ambiguity, timeouts, tool exit, required/optional policy,
+  cleanup, and unchanged wait/guardian behavior.
 
 ### Security
 
-- Window and control discovery are restricted to the exact PID Tandem launched. The only control
-  mutation is allowlisted standard ComboBox selection by numeric index with runtime-class, item-count,
-  before/after result, ambiguity, timeout, and parent-notification checks. Text matching, focus,
-  activation, input, arbitrary messages, other control mutations, UI Automation, and image matching
-  remain excluded.
+- Window and control discovery are restricted to the exact PID Tandem launched. Control mutation is
+  allowlisted to standard ComboBox selection by numeric index and exactly one standard push-button
+  `BM_CLICK`, with runtime-class, style, visibility, enabled-state, ambiguity, timeout, result, and
+  notification checks as applicable. Text matching, focus, activation, synthesized input, arbitrary
+  messages, other control mutations, UI Automation, and image matching remain excluded.
 
 ## [0.2.0-alpha] - 2026-06-24
 
@@ -74,3 +77,5 @@ All notable changes to Tandem Game Companion are documented here.
 - No graphical configuration interface, controller navigation, or notifications.
 - No worker restart or cleanup recovery after worker failure.
 - Limited real-device validation in GameNative and Winlator.
+
+- Add bounded, process-scoped standard Win32 push-button invocation preparation.

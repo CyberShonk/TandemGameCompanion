@@ -294,3 +294,7 @@ messages intact.
 
 See [Troubleshooting](troubleshooting.md) for common failures and the
 [Configuration Reference](CONFIGURATION.md) for every supported field.
+
+## Standard Win32 button invocation
+
+Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

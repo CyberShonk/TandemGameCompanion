@@ -71,3 +71,7 @@ The recovery model is deliberately limited. Tandem does not yet provide:
 - recovery after guardian termination.
 
 See [Guardian and Worker](GUARDIAN_WORKER.md) for the detailed supervision behavior.
+
+## Standard Win32 button invocation
+
+Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.
