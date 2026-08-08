@@ -82,7 +82,7 @@ timeout_ms = 10000
 | tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
 | tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
 | tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
-| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, or `select-combo-box-index` |
+| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, `select-combo-box-index`, `invoke-button`, or `set-checkbox-state` |
 | `wait-for-window` | `title_equals` | unset | Exact case-sensitive top-level window-title match |
 | `wait-for-window` | `title_contains` | unset | Case-sensitive top-level window-title substring match |
 | `wait-for-control` | `window_title_equals` | unset | Exact case-sensitive parent top-level window title |
@@ -94,6 +94,13 @@ timeout_ms = 10000
 | `select-combo-box-index` | `control_id` | required | Numeric ID from 1 to 65,535, used for discovery and `WM_COMMAND` notification |
 | `select-combo-box-index` | `control_class_equals` | unset | When present, must be exactly `ComboBox`; runtime class is always verified |
 | `select-combo-box-index` | `selected_index` | required | Zero-based item index from 0 to 1,000,000 |
+| `invoke-button` | `window_title_equals` / `window_title_contains` | exactly one | Parent top-level window selector |
+| `invoke-button` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
+| `invoke-button` | `control_class_equals` | unset | When present, must be exactly `Button`; runtime class is always verified |
+| `set-checkbox-state` | `window_title_equals` / `window_title_contains` | exactly one | Parent top-level window selector |
+| `set-checkbox-state` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
+| `set-checkbox-state` | `control_class_equals` | unset | When present, must be exactly `Button`; runtime class is always verified |
+| `set-checkbox-state` | `checked` | required | Boolean requested state (`true` or `false`) |
 | tool preparation | `timeout_ms` | `10000` | Bounded wait from 1 to 120,000 ms |
 
 ## Tool preparation recipes
@@ -176,6 +183,41 @@ checkboxes/radio buttons or edit controls, use UI Automation, match images, supp
 controls, follow descendant processes, or accept user-configurable messages. Ambiguous discovery,
 unsupported runtime class, unavailable index, message failure, verification failure, or direct tool
 exit fails the step.
+
+### `invoke-button`
+
+```toml
+[[tools.prepare]]
+action = "invoke-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1002
+timeout_ms = 10000
+```
+
+`control_id` is required. Tandem verifies the runtime class is exactly `Button`, accepts only
+`BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, requires one unambiguous visible/enabled control, and sends
+one bounded `BM_CLICK`. Checkbox, radio, owner-drawn, hidden, disabled, wrong-class, and ambiguous
+targets are rejected. The action does not activate or focus a window or synthesize user input.
+
+### `set-checkbox-state`
+
+```toml
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1003
+checked = true
+timeout_ms = 10000
+```
+
+`control_id` and `checked` are required. Tandem verifies the runtime class is exactly `Button` and
+the button type is exactly `BS_AUTOCHECKBOX`. It reads the prior state with bounded `BM_GETCHECK`.
+If the state already matches, the step completes without clicking. Otherwise it sends one bounded
+`BM_CLICK`, then reads the state again and requires the requested result. Manual checkboxes,
+three-state controls, radio buttons, owner-drawn controls, custom-drawn controls, ambiguous matches,
+and descendant-process UIs are unsupported.
 
 A required tool or a globally strict optional-tool policy fails the session when preparation times
 out, the tool exits before a match appears, or discovery reports an error. With
@@ -320,7 +362,3 @@ TandemGameCompanion.exe --dry-run
 
 `--validate` checks the configuration without launching anything. `--dry-run` prints the resolved
 launch plan.
-
-## Standard Win32 button invocation
-
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

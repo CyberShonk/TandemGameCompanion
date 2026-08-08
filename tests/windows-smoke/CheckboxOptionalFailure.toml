@@ -1,0 +1,35 @@
+config_version = 1
+
+[launcher]
+log_file = "CheckboxOptionalFailure.log"
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Optional Checkbox Failure Game"
+path = "SmokeGame.exe"
+arguments = ["checkbox-optional-events.txt", "checkbox-optional-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Optional Manual Checkbox Tool"
+path = "CheckboxTool.exe"
+arguments = [
+  "checkbox-optional-events.txt",
+  "manual",
+  "Optional Manual Checkbox Trainer",
+  "3001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+required = false
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Optional Manual Checkbox Trainer"
+control_id = 3001
+checked = true
+timeout_ms = 2000

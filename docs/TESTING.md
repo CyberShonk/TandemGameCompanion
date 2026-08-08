@@ -73,7 +73,7 @@ The smoke harness:
 1. runs Windows-target tests through Wine;
 2. builds the x86-64 Windows MSVC executable;
 3. uses an isolated Wine prefix;
-4. compiles dedicated Windows window, control, and standard ComboBox helpers;
+4. compiles dedicated Windows window, control, ComboBox, push-button, and auto-checkbox helpers;
 5. exercises EXE, BAT, and CMD launch paths;
 6. verifies BAT/CMD arguments;
 7. verifies PID-scoped window readiness despite a same-title window from another process;
@@ -83,10 +83,12 @@ The smoke harness:
 10. proves item-count validation, before/after verification, one parent notification, and no-op behavior;
 11. invokes standard push and default-push buttons exactly once with bounded `BM_CLICK`;
 12. rejects other-process, other-window, hidden, disabled, wrong-ID, wrong-class, checkbox, radio, and owner-drawn button targets;
-13. rejects ambiguous discovery and invalid recipes and exercises required, optional, timeout, and tool-exit failures;
-14. checks sequential preparation plus before-game and after-game ordering;
-15. confirms existing wait and guardian behavior; and
-16. simulates worker failure after game startup to verify guardian lifetime and exit status.
+13. sets `BS_AUTOCHECKBOX` checked and unchecked states, proves already-correct no-op behavior, and verifies exactly one click for real transitions;
+14. rejects hidden, disabled, manual, three-state, radio, owner-drawn, wrong-class, and ambiguous checkbox targets;
+15. rejects invalid recipes and exercises required, optional, timeout, and tool-exit failures;
+16. checks sequential preparation plus before-game and after-game ordering;
+17. confirms existing wait and guardian behavior; and
+18. simulates worker failure after game startup to verify guardian lifetime and exit status.
 
 See [Windows Testing](WINDOWS_TESTING.md) for prerequisites.
 
@@ -109,7 +111,3 @@ Before a broader release, test at minimum:
 - worker failure while the game remains active.
 
 Do not claim an environment is supported until it has been tested directly.
-
-## Standard Win32 button invocation
-
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

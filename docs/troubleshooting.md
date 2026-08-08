@@ -93,6 +93,23 @@ text, open the list, focus the control, send input, or support custom-drawn Comb
 exits and leaves its GUI in another process is outside the direct-PID boundary. An already-selected
 index is successful without mutation or parent notification.
 
+## An `invoke-button` preparation step fails
+
+Check `Tandem.log` for the parent selector, control ID, runtime class, button style, and failure
+reason. The target must be one visible, enabled standard `Button` owned by the directly launched tool
+PID and must use `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`. Checkbox, radio, owner-drawn, custom-drawn,
+and ambiguous controls are rejected.
+
+## A `set-checkbox-state` preparation step fails
+
+Check `Tandem.log` for the parent selector, numeric control ID, runtime class, button style, requested
+state, prior state, and resulting state. The supported control must be visible, enabled, owned by the
+directly launched tool PID, have runtime class `Button`, and use `BS_AUTOCHECKBOX`.
+
+Manual `BS_CHECKBOX`, three-state, radio, owner-drawn, custom-drawn, and framework-specific controls
+are intentionally rejected. If the requested state already matches, success is a no-op. Otherwise a
+real transition sends one bounded `BM_CLICK` and must verify the new state with `BM_GETCHECK`.
+
 ## A required setup utility stops the session
 
 With:
@@ -198,7 +215,3 @@ Include:
 - exact reproduction steps.
 
 Do not upload credentials, copyrighted game files, or proprietary third-party executables.
-
-## Standard Win32 button invocation
-
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

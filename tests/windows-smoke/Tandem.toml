@@ -271,3 +271,86 @@ window_title_contains = "Scoped Button Trainer"
 control_class_equals = "Button"
 control_id = 2001
 timeout_ms = 5000
+
+[[tools]]
+name = "Checkbox Impostor Tool"
+path = "CheckboxTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "impostor",
+  "Scoped Checkbox Trainer",
+  "3001",
+  "0",
+  "0",
+  "2600"
+]
+working_directory = "."
+launch = "before-game"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools]]
+name = "Scoped Checkbox Tool"
+path = "CheckboxTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "scoped",
+  "Scoped Checkbox Trainer",
+  "3001",
+  "300",
+  "300",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 500
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Scoped Checkbox Trainer"
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_equals = "Scoped Checkbox Trainer"
+control_class_equals = "Button"
+control_id = 3001
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_contains = "Scoped Checkbox Trainer"
+control_class_equals = "Button"
+control_id = 3001
+checked = true
+timeout_ms = 5000
+
+[[tools]]
+name = "Checkbox No-op Tool"
+path = "CheckboxTool.exe"
+arguments = [
+  "smoke-events.txt",
+  "noop-checked",
+  "Already Checked Checkbox Trainer",
+  "3002",
+  "0",
+  "0",
+  "700"
+]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 500
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Already Checked Checkbox Trainer"
+control_id = 3002
+checked = true
+timeout_ms = 5000

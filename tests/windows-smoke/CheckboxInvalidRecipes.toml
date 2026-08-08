@@ -1,0 +1,89 @@
+config_version = 1
+
+[game]
+name = "Invalid Checkbox Recipe Game"
+path = "SmokeGame.exe"
+working_directory = "."
+
+[[tools]]
+name = "Ambiguous Checkbox Recipe Tool"
+path = "CheckboxTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+checked = true
+
+[[tools]]
+name = "Invalid Checkbox ID Tool"
+path = "CheckboxTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 0
+checked = true
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 2147483648
+checked = true
+
+[[tools]]
+name = "Invalid Checkbox Class Tool"
+path = "CheckboxTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 3001
+control_class_equals = "ComboBox"
+checked = true
+
+[[tools]]
+name = "Missing Checkbox State Tool"
+path = "CheckboxTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 3001
+
+[[tools]]
+name = "Invalid Checkbox Timeout Tool"
+path = "CheckboxTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 3001
+checked = true
+timeout_ms = 0
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 3001
+checked = true
+timeout_ms = 120001
+
+[[tools]]
+name = "After-game Checkbox Preparation Tool"
+path = "CheckboxTool.exe"
+launch = "after-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 3001
+checked = true
+
+[[tools]]
+name = "CMD Checkbox Preparation Tool"
+path = "BeforeTool.cmd"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Trainer"
+control_id = 3001
+checked = true

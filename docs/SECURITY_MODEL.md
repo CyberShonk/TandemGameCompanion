@@ -30,7 +30,7 @@ Tandem must not:
 - Program paths must resolve to files and working directories must resolve to directories.
 - Recursive Tandem launch is rejected.
 - Tool-count, argument-size, and delay limits are enforced.
-- Preparation recipes are allowlisted, count-limited, and bounded; the only mutation is standard Win32 ComboBox selection by numeric index.
+- Preparation recipes are allowlisted, count-limited, and bounded; mutations are limited to standard Win32 ComboBox index selection, push-button invocation, and `BS_AUTOCHECKBOX` state setting.
 - Top-level window discovery accepts only visible windows owned by the exact launched tool PID.
 - Control discovery is restricted to visible, enabled descendant HWNDs under the selected top-level
   window and owned by that same PID.
@@ -38,10 +38,14 @@ Tandem must not:
   semantics. It does not read cross-process control text.
 - ComboBox selection uses only documented `CB_GETCOUNT`, `CB_GETCURSEL`, and `CB_SETCURSEL`
   messages plus one standard `WM_COMMAND`/`CBN_SELCHANGE` notification when the index changes.
-- The mutation requires one unambiguous parent and control, exact runtime class `ComboBox`, a valid
-  item count, before/after verification, and a directly launched PID.
+- Push-button invocation accepts only `BS_PUSHBUTTON`/`BS_DEFPUSHBUTTON` and sends one bounded
+  `BM_CLICK`. Auto-checkbox state setting accepts only `BS_AUTOCHECKBOX`, reads with bounded
+  `BM_GETCHECK`, skips mutation when already correct, otherwise sends one bounded `BM_CLICK`, and
+  verifies the resulting state.
+- Mutations require one unambiguous parent and control, the expected runtime class and style,
+  visible/enabled state, operation-specific before/after verification, and a directly launched PID.
 - Preparation performs no activation, focus, movement, keyboard or mouse input, item-text matching,
-  arbitrary messages, button invocation, checkbox/radio or edit changes, UI Automation, image
+  arbitrary configurable messages, edit changes, radio-button changes, UI Automation, image
   matching, custom-control mutation, or descendant-process following.
 - Window and control preparation reject BAT/CMD wrappers and do not follow descendant processes.
 - Existing log targets and parent directories are canonicalized to stop symlink or junction
@@ -82,7 +86,3 @@ termination of descendants created by launchers, scripts, or tools.
 
 Selected programs remain outside Tandem's trust boundary. They retain the current user's normal
 permissions, and Tandem does not sandbox them.
-
-## Standard Win32 button invocation
-
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

@@ -20,17 +20,20 @@ All notable changes to Tandem Game Companion are documented here.
   and the minimum standard parent selection-change notification.
 - Process-scoped `invoke-button` preparation for visible, enabled standard Win32 push and
   default-push buttons, using one bounded `BM_CLICK` after runtime class and button-style checks.
-- Wine smoke coverage for ComboBox and button mutation scoping, exactly-once invocation, no-op
-  behavior, unsupported-style rejection, ambiguity, timeouts, tool exit, required/optional policy,
-  cleanup, and unchanged wait/guardian behavior.
+- Process-scoped `set-checkbox-state` preparation for visible, enabled `BS_AUTOCHECKBOX` controls,
+  with bounded state reads, no-op behavior, one-click transitions, and post-change verification.
+- Wine smoke coverage for ComboBox, button, and checkbox mutation scoping, exactly-once transitions,
+  no-op behavior, unsupported-style rejection, ambiguity, timeouts, tool exit, required/optional
+  policy, cleanup, and unchanged wait/guardian behavior.
 
 ### Security
 
 - Window and control discovery are restricted to the exact PID Tandem launched. Control mutation is
-  allowlisted to standard ComboBox selection by numeric index and exactly one standard push-button
-  `BM_CLICK`, with runtime-class, style, visibility, enabled-state, ambiguity, timeout, result, and
-  notification checks as applicable. Text matching, focus, activation, synthesized input, arbitrary
-  messages, other control mutations, UI Automation, and image matching remain excluded.
+  allowlisted to standard ComboBox selection by numeric index, one standard push-button `BM_CLICK`,
+  and deterministic `BS_AUTOCHECKBOX` state transitions. Runtime-class, style, visibility, enabled
+  state, ambiguity, timeout, before/after result, and notification checks are applied as applicable.
+  Text matching, focus, activation, synthesized input, arbitrary messages, other control mutations,
+  UI Automation, and image matching remain excluded.
 
 ## [0.2.0-alpha] - 2026-06-24
 
@@ -77,5 +80,3 @@ All notable changes to Tandem Game Companion are documented here.
 - No graphical configuration interface, controller navigation, or notifications.
 - No worker restart or cleanup recovery after worker failure.
 - Limited real-device validation in GameNative and Winlator.
-
-- Add bounded, process-scoped standard Win32 push-button invocation preparation.

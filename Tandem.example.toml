@@ -75,3 +75,12 @@ close_when_game_exits = true
 # control_id = 1002
 # control_class_equals = "Button"
 # timeout_ms = 10000
+
+# Standard Win32 auto-checkbox state preparation example
+# [[tools.prepare]]
+# action = "set-checkbox-state"
+# window_title_contains = "Trainer"
+# control_id = 1003
+# control_class_equals = "Button"
+# checked = true
+# timeout_ms = 10000
