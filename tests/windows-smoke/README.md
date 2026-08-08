@@ -21,6 +21,8 @@ The test covers:
 - Exactly-once `BM_CLICK` invocation for standard push and default-push buttons.
 - Button PID, parent-window, visibility, enabled-state, control-ID, class, and style scoping.
 - Checkbox, radio, owner-drawn, wrong-class, ambiguous, timeout, direct-exit, required, and optional button failures.
+- Deterministic `BS_AUTOCHECKBOX` checked/unchecked transitions with bounded `BM_GETCHECK`/`BM_CLICK` verification and already-correct no-op behavior.
+- Checkbox PID, parent-window, visibility, enabled-state, control-ID, class, style, ambiguity, timeout, direct-exit, required, and optional failure coverage.
 - Invalid recipe, ambiguous parent/control, out-of-range, direct exit, required, and optional failures.
 - Required tool exit and timeout failures during control preparation.
 - Optional control timeout continuation and cleanup.

@@ -230,6 +230,24 @@ pub enum ButtonInvocationStatus {
     Pending { reason: String },
     Complete(ButtonInvocation),
 }
+#[derive(Debug)]
+pub struct CheckboxStateChange {
+    pub window_title: String,
+    pub control_id: i32,
+    pub class_name: String,
+    pub button_style: u32,
+    pub requested_checked: bool,
+    pub prior_checked: bool,
+    pub resulting_checked: bool,
+    pub clicked: bool,
+}
+
+#[derive(Debug)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum CheckboxStateStatus {
+    Pending { reason: String },
+    Complete(CheckboxStateChange),
+}
 
 #[cfg(windows)]
 #[derive(Clone)]
@@ -801,5 +819,150 @@ pub fn invoke_button(
 ) -> Result<ButtonInvocationStatus, AppError> {
     Err(AppError::runtime(
         "invoke-button preparation is only available in Windows builds",
+    ))
+}
+#[cfg(windows)]
+pub fn set_checkbox_state(
+    pid: u32,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    requested_checked: bool,
+    message_timeout_ms: u32,
+) -> Result<CheckboxStateStatus, AppError> {
+    use std::time::{Duration, Instant};
+    use windows::Win32::UI::WindowsAndMessaging::{GWL_STYLE, GetWindowLongPtrW};
+
+    const BM_GETCHECK: u32 = 0x00F0;
+    const BM_CLICK: u32 = 0x00F5;
+    const BST_UNCHECKED: isize = 0x0000;
+    const BST_CHECKED: isize = 0x0001;
+    const BS_TYPEMASK: u32 = 0x000F;
+    const BS_AUTOCHECKBOX: u32 = 0x0003;
+
+    let windows = matching_top_level_windows(pid, window_matcher)?;
+    let window = match windows.as_slice() {
+        [] => {
+            return Ok(CheckboxStateStatus::Pending {
+                reason: "matching parent window is not available".into(),
+            });
+        }
+        [window] => window,
+        _ => {
+            return Err(AppError::runtime(format!(
+                "ambiguous parent window selector for companion process {pid}: {} visible top-level windows matched {}",
+                windows.len(),
+                window_matcher.description()
+            )));
+        }
+    };
+    let controls = matching_descendant_controls(window.hwnd, pid, control_selector)?;
+    let control = match controls.as_slice() {
+        [] => {
+            return Ok(CheckboxStateStatus::Pending {
+                reason: "matching visible enabled descendant control is not available".into(),
+            });
+        }
+        [control] => control,
+        _ => {
+            return Err(AppError::runtime(format!(
+                "ambiguous control selector in window {:?}: {} visible enabled descendant controls matched {}",
+                window.title,
+                controls.len(),
+                control_selector.description()
+            )));
+        }
+    };
+    if control.class_name != "Button" {
+        return Err(AppError::runtime(format!(
+            "matched control ID {} in window {:?} has unsupported runtime class {:?}; expected exactly \"Button\"",
+            control.control_id, window.title, control.class_name
+        )));
+    }
+    // SAFETY: the handle was discovered from the directly launched process and remains valid for
+    // this synchronous style query. GWL_STYLE reads metadata and does not mutate the control.
+    let raw_style = unsafe { GetWindowLongPtrW(control.hwnd, GWL_STYLE) } as u32;
+    let button_style = raw_style & BS_TYPEMASK;
+    if button_style != BS_AUTOCHECKBOX {
+        return Err(AppError::runtime(format!(
+            "matched Button control ID {} in window {:?} has unsupported button type style 0x{button_style:04x}; set-checkbox-state supports only BS_AUTOCHECKBOX",
+            control.control_id, window.title
+        )));
+    }
+    let deadline = Instant::now() + Duration::from_millis(u64::from(message_timeout_ms.max(1)));
+    let decode = |raw: isize, phase: &str| -> Result<bool, AppError> {
+        match raw {
+            BST_UNCHECKED => Ok(false),
+            BST_CHECKED => Ok(true),
+            _ => Err(AppError::runtime(format!(
+                "BM_GETCHECK returned unsupported state {raw} {phase} for control ID {} in window {:?}",
+                control.control_id, window.title
+            ))),
+        }
+    };
+    let prior_raw = send_bounded_window_message(
+        control.hwnd,
+        BM_GETCHECK,
+        0,
+        0,
+        deadline,
+        "BM_GETCHECK before checkbox state preparation",
+    )?;
+    let prior_checked = decode(prior_raw, "before checkbox state preparation")?;
+    if prior_checked == requested_checked {
+        return Ok(CheckboxStateStatus::Complete(CheckboxStateChange {
+            window_title: window.title.clone(),
+            control_id: control.control_id,
+            class_name: control.class_name.clone(),
+            button_style,
+            requested_checked,
+            prior_checked,
+            resulting_checked: prior_checked,
+            clicked: false,
+        }));
+    }
+    let _ = send_bounded_window_message(
+        control.hwnd,
+        BM_CLICK,
+        0,
+        0,
+        deadline,
+        "BM_CLICK checkbox state transition",
+    )?;
+    let resulting_raw = send_bounded_window_message(
+        control.hwnd,
+        BM_GETCHECK,
+        0,
+        0,
+        deadline,
+        "BM_GETCHECK after checkbox state preparation",
+    )?;
+    let resulting_checked = decode(resulting_raw, "after checkbox state preparation")?;
+    if resulting_checked != requested_checked {
+        return Err(AppError::runtime(format!(
+            "checkbox state verification failed for control ID {} in window {:?}: requested checked={}, prior checked={}, resulting checked={}",
+            control.control_id, window.title, requested_checked, prior_checked, resulting_checked
+        )));
+    }
+    Ok(CheckboxStateStatus::Complete(CheckboxStateChange {
+        window_title: window.title.clone(),
+        control_id: control.control_id,
+        class_name: control.class_name.clone(),
+        button_style,
+        requested_checked,
+        prior_checked,
+        resulting_checked,
+        clicked: true,
+    }))
+}
+#[cfg(not(windows))]
+pub fn set_checkbox_state(
+    _pid: u32,
+    _window_matcher: &WindowTitleMatcher,
+    _control_selector: &ControlSelector,
+    _requested_checked: bool,
+    _message_timeout_ms: u32,
+) -> Result<CheckboxStateStatus, AppError> {
+    Err(AppError::runtime(
+        "set-checkbox-state preparation is only available in Windows builds",
     ))
 }

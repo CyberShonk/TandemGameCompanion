@@ -1,0 +1,26 @@
+config_version = 1
+
+[launcher]
+log_file = "CheckboxExit.log"
+
+[game]
+name = "Checkbox Exit Game"
+path = "SmokeGame.exe"
+arguments = ["checkbox-exit-events.txt", "checkbox-exit-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Exiting Checkbox Tool"
+path = "SmokeTool.exe"
+arguments = ["checkbox-exit-events.txt", "checkbox-tool-exit", "100"]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Never Created Checkbox Trainer"
+control_id = 3001
+checked = true
+timeout_ms = 2000

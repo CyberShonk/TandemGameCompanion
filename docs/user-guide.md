@@ -161,6 +161,44 @@ Text matching, `CB_SELECTSTRING`, arbitrary messages, list opening, focus, activ
 mouse input, button or checkbox/radio mutation, UI Automation, image matching, custom controls, and
 descendant-process following remain unsupported.
 
+### Invoke a standard Win32 push button
+
+```toml
+[[tools.prepare]]
+action = "invoke-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1002
+timeout_ms = 10000
+```
+
+This action requires a numeric control ID and only supports `BS_PUSHBUTTON` and
+`BS_DEFPUSHBUTTON`. Tandem verifies the runtime class and style, requires a unique visible/enabled
+control inside the directly launched tool process, and sends one bounded `BM_CLICK`. It does not
+activate or focus the window or synthesize input.
+
+### Set a standard Win32 auto-checkbox state
+
+```toml
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1003
+checked = true
+timeout_ms = 10000
+```
+
+Use `checked = true` to require the checkbox on or `checked = false` to require it off. Tandem only
+supports standard `BS_AUTOCHECKBOX` controls. It reads the current state first, completes without a
+click when the state is already correct, or sends one bounded `BM_CLICK` and verifies the resulting
+state when a transition is required.
+
+The direct-PID, parent-window, control-ID, runtime-class, visibility, enabled-state, ambiguity, and
+timeout boundaries used by other preparation actions still apply. Manual and three-state checkboxes,
+radio buttons, owner-drawn controls, focus/activation, synthesized input, and custom controls are not
+supported by this action.
+
 ### Trainer configuration before game startup
 
 ```toml
@@ -294,7 +332,3 @@ messages intact.
 
 See [Troubleshooting](troubleshooting.md) for common failures and the
 [Configuration Reference](CONFIGURATION.md) for every supported field.
-
-## Standard Win32 button invocation
-
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

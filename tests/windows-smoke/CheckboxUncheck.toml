@@ -1,0 +1,36 @@
+config_version = 1
+
+[launcher]
+log_file = "CheckboxUncheck.log"
+
+[game]
+name = "Checkbox Uncheck Game"
+path = "SmokeGame.exe"
+arguments = ["checkbox-uncheck-events.txt", "checkbox-uncheck-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Checkbox Uncheck Tool"
+path = "CheckboxTool.exe"
+arguments = [
+  "checkbox-uncheck-events.txt",
+  "uncheck",
+  "Checkbox Uncheck Trainer",
+  "3001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Checkbox Uncheck Trainer"
+control_class_equals = "Button"
+control_id = 3001
+checked = false
+timeout_ms = 2000

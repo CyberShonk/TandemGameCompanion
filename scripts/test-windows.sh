@@ -93,6 +93,14 @@ x86_64-w64-mingw32-gcc \
   -s \
   -o "$SMOKE_DIR/ButtonTool.exe" \
   "$FIXTURE_DIR/button-helper.c"
+x86_64-w64-mingw32-gcc \
+  -O2 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -s \
+  -o "$SMOKE_DIR/CheckboxTool.exe" \
+  "$FIXTURE_DIR/checkbox-helper.c"
 
 cp "$SMOKE_DIR/SmokeHelper.exe" "$SMOKE_DIR/SmokeGame.exe"
 cp "$SMOKE_DIR/SmokeHelper.exe" "$SMOKE_DIR/SmokeTool.exe"
@@ -124,6 +132,19 @@ cp "$FIXTURE_DIR/ButtonAmbiguousControl.toml" "$SMOKE_DIR/"
 cp "$FIXTURE_DIR/ButtonOptionalFailure.toml" "$SMOKE_DIR/"
 cp "$FIXTURE_DIR/ButtonExit.toml" "$SMOKE_DIR/"
 cp "$FIXTURE_DIR/ButtonInvalidRecipes.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxUncheck.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxHidden.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxDisabled.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxManual.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxThreeState.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxRadio.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxOwnerDraw.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxWrongRuntimeClass.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxAmbiguousParent.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxAmbiguousControl.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxOptionalFailure.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxExit.toml" "$SMOKE_DIR/"
+cp "$FIXTURE_DIR/CheckboxInvalidRecipes.toml" "$SMOKE_DIR/"
 
 cd "$SMOKE_DIR"
 
@@ -194,6 +215,21 @@ expected_events=(
   "button-correct-class-wrong-id-final-click-count-0"
   "button-other-window-final-click-count-0"
   "button-other-process-final-click-count-0"
+  "checkbox-impostor-start"
+  "checkbox-impostor-ready-checked-0-click-count-0"
+  "checkbox-scoped-start"
+  "checkbox-selector-decoys-ready"
+  "checkbox-target-hidden-checked-0-click-count-0"
+  "checkbox-other-window-ready-checked-0-click-count-0"
+  "checkbox-target-visible-disabled-checked-0-click-count-0"
+  "checkbox-target-visible-enabled-checked-0-click-count-0"
+  "checkbox-target-click-1-checked-1"
+  "checkbox-target-final-checked-1-click-count-1"
+  "checkbox-correct-class-wrong-id-final-checked-0-click-count-0"
+  "checkbox-other-window-final-checked-0-click-count-0"
+  "checkbox-other-process-final-checked-0-click-count-0"
+  "checkbox-noop-ready-checked-1-click-count-0"
+  "checkbox-noop-final-checked-1-click-count-0"
   "before-cmd:before-cmd-arg"
   "game-start"
   "after-bat:after-bat-arg"
@@ -346,6 +382,35 @@ if [[ -z "$button_final_line" || -z "$game_start_line" || "$button_clicked_line"
   exit 1
 fi
 
+checkbox_impostor_ready_line="$(grep -nF -m 1 -x "checkbox-impostor-ready-checked-0-click-count-0" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_scoped_start_line="$(grep -nF -m 1 -x "checkbox-scoped-start" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_hidden_line="$(grep -nF -m 1 -x "checkbox-target-hidden-checked-0-click-count-0" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_disabled_line="$(grep -nF -m 1 -x "checkbox-target-visible-disabled-checked-0-click-count-0" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_enabled_line="$(grep -nF -m 1 -x "checkbox-target-visible-enabled-checked-0-click-count-0" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_clicked_line="$(grep -nF -m 1 -x "checkbox-target-click-1-checked-1" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_final_line="$(grep -nF -m 1 -x "checkbox-target-final-checked-1-click-count-1" smoke-events.normalized.txt | cut -d: -f1)"
+checkbox_noop_final_line="$(grep -nF -m 1 -x "checkbox-noop-final-checked-1-click-count-0" smoke-events.normalized.txt | cut -d: -f1)"
+if [[ -z "$checkbox_impostor_ready_line" || -z "$checkbox_scoped_start_line" || "$checkbox_impostor_ready_line" -ge "$checkbox_scoped_start_line" ]]; then
+  echo "The matching checkbox in another process was not ready before the scoped checkbox tool started." >&2
+  exit 1
+fi
+if [[ -z "$checkbox_hidden_line" || -z "$checkbox_disabled_line" || "$checkbox_hidden_line" -ge "$checkbox_disabled_line" ]]; then
+  echo "The checkbox target did not begin hidden before becoming visible and disabled." >&2
+  exit 1
+fi
+if [[ -z "$checkbox_disabled_line" || -z "$checkbox_enabled_line" || "$checkbox_disabled_line" -ge "$checkbox_enabled_line" ]]; then
+  echo "The checkbox target did not remain disabled before becoming enabled." >&2
+  exit 1
+fi
+if [[ -z "$checkbox_clicked_line" || -z "$checkbox_final_line" || -z "$checkbox_noop_final_line" || -z "$game_start_line" ]]; then
+  echo "Checkbox mutation, final verification, no-op, or game-start evidence is incomplete." >&2
+  exit 1
+fi
+if [[ "$checkbox_enabled_line" -ge "$checkbox_clicked_line" || "$checkbox_clicked_line" -ge "$checkbox_final_line" || "$checkbox_final_line" -ge "$game_start_line" || "$checkbox_noop_final_line" -ge "$game_start_line" ]]; then
+  echo "Game started before checkbox state mutation and no-op verification completed." >&2
+  exit 1
+fi
+
 if [[ ! -f Tandem.log ]]; then
   echo "Smoke test did not create Tandem.log." >&2
   exit 1
@@ -388,6 +453,22 @@ fi
 
 if ! grep -Fq "Scoped Button Tool exited before game launch with status: exit code: 0" Tandem.log; then
   echo "Scoped Button Tool did not finish its exactly-once verification before game launch." >&2
+  exit 1
+fi
+if ! grep -Fq 'Preparation step 3 for Scoped Checkbox Tool completed: set standard Win32 auto-checkbox state in window "Scoped Checkbox Trainer" with selector control ID 3001, runtime class "Button", and button type style 0x0003: requested checked=true, prior checked=false, resulting checked=true, sent one bounded BM_CLICK.' Tandem.log; then
+  echo "Scoped Checkbox Tool state transition was not verified according to Tandem.log." >&2
+  exit 1
+fi
+if ! grep -Fq 'Preparation step 1 for Checkbox No-op Tool completed: set standard Win32 auto-checkbox state in window "Already Checked Checkbox Trainer" with selector control ID 3002, runtime class "Button", and button type style 0x0003: requested checked=true, prior checked=true, resulting checked=true, no click; requested state was already set.' Tandem.log; then
+  echo "Checkbox No-op Tool did not follow the documented no-op policy." >&2
+  exit 1
+fi
+if ! grep -Fq "Scoped Checkbox Tool exited before game launch with status: exit code: 0" Tandem.log; then
+  echo "Scoped Checkbox Tool did not finish state verification before game launch." >&2
+  exit 1
+fi
+if ! grep -Fq "Checkbox No-op Tool exited before game launch with status: exit code: 0" Tandem.log; then
+  echo "Checkbox No-op Tool did not finish no-op verification before game launch." >&2
   exit 1
 fi
 
@@ -916,6 +997,259 @@ if ! grep -Fq "exited before the requested button was invoked" button-exit-outpu
 fi
 
 echo "Button invocation and failure-path smoke tests passed."
+
+echo
+echo "== Invalid checkbox recipe validation =="
+rm -f checkbox-invalid-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config CheckboxInvalidRecipes.toml --validate > checkbox-invalid-output.txt 2>&1
+checkbox_invalid_status=$?
+set -e
+if [[ "$checkbox_invalid_status" -ne 1 ]]; then
+  echo "Invalid checkbox recipe validation returned $checkbox_invalid_status instead of 1." >&2
+  cat checkbox-invalid-output.txt >&2
+  exit 1
+fi
+for expected in \
+  "must define exactly one of window_title_equals or window_title_contains" \
+  "must define control_id for deterministic checkbox state preparation" \
+  "control_id must be between 1 and 2147483647 for set-checkbox-state" \
+  'control_class_equals must be exactly "Button" for set-checkbox-state' \
+  "must define checked" \
+  "timeout_ms must be between 1 and 120000" \
+  'preparation requires launch = "before-game"' \
+  "preparation requires a directly launched EXE or COM file"; do
+  if ! grep -Fq "$expected" checkbox-invalid-output.txt; then
+    echo "Invalid checkbox recipe validation did not report: $expected" >&2
+    cat checkbox-invalid-output.txt >&2
+    exit 1
+  fi
+done
+
+echo
+echo "== Checked-to-unchecked checkbox transition =="
+rm -f CheckboxUncheck.log checkbox-uncheck-events.txt checkbox-uncheck-events.normalized.txt checkbox-uncheck-output.txt
+wine ./TandemGameCompanion.exe --config CheckboxUncheck.toml > checkbox-uncheck-output.txt 2>&1
+tr -d '\r' < checkbox-uncheck-events.txt > checkbox-uncheck-events.normalized.txt
+for expected in \
+  "checkbox-uncheck-ready-checked-1-click-count-0" \
+  "checkbox-uncheck-click-1-checked-0" \
+  "checkbox-uncheck-final-checked-0-click-count-1" \
+  "checkbox-uncheck-game-start"; do
+  if ! grep -Fxq "$expected" checkbox-uncheck-events.normalized.txt; then
+    echo "Checkbox uncheck test did not record: $expected" >&2
+    cat checkbox-uncheck-output.txt >&2
+    exit 1
+  fi
+done
+if grep -Fq "VIOLATION-" checkbox-uncheck-events.normalized.txt; then
+  echo "Checkbox uncheck test recorded an unintended mutation." >&2
+  cat checkbox-uncheck-events.normalized.txt >&2
+  exit 1
+fi
+checkbox_uncheck_click_line="$(grep -nF -m 1 -x "checkbox-uncheck-click-1-checked-0" checkbox-uncheck-events.normalized.txt | cut -d: -f1)"
+checkbox_uncheck_final_line="$(grep -nF -m 1 -x "checkbox-uncheck-final-checked-0-click-count-1" checkbox-uncheck-events.normalized.txt | cut -d: -f1)"
+checkbox_uncheck_game_line="$(grep -nF -m 1 -x "checkbox-uncheck-game-start" checkbox-uncheck-events.normalized.txt | cut -d: -f1)"
+if [[ "$checkbox_uncheck_click_line" -ge "$checkbox_uncheck_final_line" || "$checkbox_uncheck_final_line" -ge "$checkbox_uncheck_game_line" ]]; then
+  echo "Checkbox uncheck game started before the transition was verified." >&2
+  exit 1
+fi
+if ! grep -Fq 'Preparation step 1 for Checkbox Uncheck Tool completed: set standard Win32 auto-checkbox state in window "Checkbox Uncheck Trainer" with selector control ID 3001, runtime class "Button", and button type style 0x0003: requested checked=false, prior checked=true, resulting checked=false, sent one bounded BM_CLICK.' CheckboxUncheck.log; then
+  echo "Checked-to-unchecked transition was not verified in CheckboxUncheck.log." >&2
+  exit 1
+fi
+
+run_required_checkbox_failure() {
+  local config="$1"
+  local log_file="$2"
+  local event_file="$3"
+  local output_file="$4"
+  local game_event="$5"
+  local expected_error="$6"
+  local tool_name="$7"
+
+  rm -f "$log_file" "$event_file" "$output_file"
+  set +e
+  wine ./TandemGameCompanion.exe --config "$config" > "$output_file" 2>&1
+  local status=$?
+  set -e
+
+  if [[ "$status" -ne 1 ]]; then
+    echo "$config returned $status instead of 1." >&2
+    cat "$output_file" >&2
+    exit 1
+  fi
+  if grep -Fq "VIOLATION-" "$event_file" 2>/dev/null; then
+    echo "$config mutated a checkbox that should have been rejected." >&2
+    cat "$event_file" >&2
+    exit 1
+  fi
+  if grep -Fq "$game_event" "$event_file" 2>/dev/null; then
+    echo "$config started the game after a required checkbox preparation failure." >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected_error" "$output_file"; then
+    echo "$config did not report the expected failure: $expected_error" >&2
+    cat "$output_file" >&2
+    exit 1
+  fi
+  if ! grep -Fq "Closing companion tool $tool_name after preparation failure." "$log_file"; then
+    echo "$config did not clean up the failed checkbox tool." >&2
+    exit 1
+  fi
+}
+
+echo
+echo "== Hidden checkbox rejection =="
+run_required_checkbox_failure \
+  CheckboxHidden.toml \
+  CheckboxHidden.log \
+  checkbox-hidden-events.txt \
+  checkbox-hidden-output.txt \
+  checkbox-hidden-game-start \
+  "timed out after 300 ms setting checkbox state" \
+  "Hidden Checkbox Trainer Tool"
+if ! grep -Fq "matching visible enabled descendant control is not available" checkbox-hidden-output.txt; then
+  echo "Hidden checkbox timeout did not identify the unavailable visible-enabled control." >&2
+  exit 1
+fi
+
+echo
+echo "== Disabled checkbox rejection =="
+run_required_checkbox_failure \
+  CheckboxDisabled.toml \
+  CheckboxDisabled.log \
+  checkbox-disabled-events.txt \
+  checkbox-disabled-output.txt \
+  checkbox-disabled-game-start \
+  "timed out after 300 ms setting checkbox state" \
+  "Disabled Checkbox Trainer Tool"
+if ! grep -Fq "matching visible enabled descendant control is not available" checkbox-disabled-output.txt; then
+  echo "Disabled checkbox timeout did not identify the unavailable visible-enabled control." >&2
+  exit 1
+fi
+
+echo
+echo "== Manual checkbox-style rejection =="
+run_required_checkbox_failure \
+  CheckboxManual.toml \
+  CheckboxManual.log \
+  checkbox-manual-events.txt \
+  checkbox-manual-output.txt \
+  checkbox-manual-game-start \
+  "unsupported button type style 0x0002; set-checkbox-state supports only BS_AUTOCHECKBOX" \
+  "Manual Checkbox Trainer Tool"
+
+echo
+echo "== Three-state checkbox-style rejection =="
+run_required_checkbox_failure \
+  CheckboxThreeState.toml \
+  CheckboxThreeState.log \
+  checkbox-threestate-events.txt \
+  checkbox-threestate-output.txt \
+  checkbox-threestate-game-start \
+  "unsupported button type style 0x0006; set-checkbox-state supports only BS_AUTOCHECKBOX" \
+  "Three-state Checkbox Trainer Tool"
+
+echo
+echo "== Radio checkbox-style rejection =="
+run_required_checkbox_failure \
+  CheckboxRadio.toml \
+  CheckboxRadio.log \
+  checkbox-radio-events.txt \
+  checkbox-radio-output.txt \
+  checkbox-radio-game-start \
+  "unsupported button type style 0x0009; set-checkbox-state supports only BS_AUTOCHECKBOX" \
+  "Radio Checkbox Trainer Tool"
+
+echo
+echo "== Owner-draw checkbox-style rejection =="
+run_required_checkbox_failure \
+  CheckboxOwnerDraw.toml \
+  CheckboxOwnerDraw.log \
+  checkbox-ownerdraw-events.txt \
+  checkbox-ownerdraw-output.txt \
+  checkbox-ownerdraw-game-start \
+  "unsupported button type style 0x000b; set-checkbox-state supports only BS_AUTOCHECKBOX" \
+  "Owner-draw Checkbox Trainer Tool"
+
+echo
+echo "== Wrong runtime class checkbox rejection =="
+run_required_checkbox_failure \
+  CheckboxWrongRuntimeClass.toml \
+  CheckboxWrongRuntimeClass.log \
+  checkbox-wrong-runtime-class-events.txt \
+  checkbox-wrong-runtime-class-output.txt \
+  checkbox-wrong-runtime-class-game-start \
+  'has unsupported runtime class "Static"; expected exactly "Button"' \
+  "Wrong Runtime Class Checkbox Trainer Tool"
+
+echo
+echo "== Ambiguous checkbox parent rejection =="
+run_required_checkbox_failure \
+  CheckboxAmbiguousParent.toml \
+  CheckboxAmbiguousParent.log \
+  checkbox-ambiguous-parent-events.txt \
+  checkbox-ambiguous-parent-output.txt \
+  checkbox-ambiguous-parent-game-start \
+  "ambiguous parent window selector" \
+  "Ambiguous Checkbox Parent Tool"
+
+echo
+echo "== Ambiguous checkbox control rejection =="
+run_required_checkbox_failure \
+  CheckboxAmbiguousControl.toml \
+  CheckboxAmbiguousControl.log \
+  checkbox-ambiguous-control-events.txt \
+  checkbox-ambiguous-control-output.txt \
+  checkbox-ambiguous-control-game-start \
+  "ambiguous control selector" \
+  "Ambiguous Checkbox Control Tool"
+
+echo
+echo "== Optional checkbox failure continuation =="
+rm -f CheckboxOptionalFailure.log checkbox-optional-events.txt checkbox-optional-output.txt
+wine ./TandemGameCompanion.exe --config CheckboxOptionalFailure.toml > checkbox-optional-output.txt 2>&1
+if grep -Fq "VIOLATION-" checkbox-optional-events.txt 2>/dev/null; then
+  echo "Optional checkbox failure mutated the rejected control." >&2
+  cat checkbox-optional-events.txt >&2
+  exit 1
+fi
+if ! grep -Fq "checkbox-optional-game-start" checkbox-optional-events.txt; then
+  echo "Game did not start after an optional checkbox preparation failure." >&2
+  cat checkbox-optional-output.txt >&2
+  exit 1
+fi
+if ! grep -Fq "Optional tool Optional Manual Checkbox Tool preparation failed:" CheckboxOptionalFailure.log \
+  || ! grep -Fq "Continuing without this tool." CheckboxOptionalFailure.log \
+  || ! grep -Fq "Closing companion tool Optional Manual Checkbox Tool after preparation failure." CheckboxOptionalFailure.log; then
+  echo "Optional checkbox failure policy or cleanup was not logged." >&2
+  exit 1
+fi
+
+echo
+echo "== Checkbox tool-exit detection =="
+rm -f CheckboxExit.log checkbox-exit-events.txt checkbox-exit-output.txt
+set +e
+wine ./TandemGameCompanion.exe --config CheckboxExit.toml > checkbox-exit-output.txt 2>&1
+checkbox_exit_status=$?
+set -e
+if [[ "$checkbox_exit_status" -ne 1 ]]; then
+  echo "Checkbox exit test returned $checkbox_exit_status instead of 1." >&2
+  cat checkbox-exit-output.txt >&2
+  exit 1
+fi
+if grep -Fq "checkbox-exit-game-start" checkbox-exit-events.txt 2>/dev/null; then
+  echo "Game started after the checkbox tool exited during preparation." >&2
+  exit 1
+fi
+if ! grep -Fq "exited before the requested checkbox state was set and verified" checkbox-exit-output.txt; then
+  echo "Checkbox exit test did not report direct-tool exit." >&2
+  cat checkbox-exit-output.txt >&2
+  exit 1
+fi
+
+echo "Checkbox state and failure-path smoke tests passed."
 
 echo
 echo "== Guardian recovery smoke test =="

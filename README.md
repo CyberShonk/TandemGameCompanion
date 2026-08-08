@@ -38,6 +38,7 @@ Tandem can:
 - start tools before or after the game;
 - delay tool launches when required;
 - wait for a visible top-level window or visible enabled standard Win32 control owned by a launched before-game tool;
+- perform bounded process-scoped ComboBox selection, push-button invocation, and auto-checkbox state preparation;
 - pause for a native confirmation before starting the game;
 - wait for a one-shot setup utility to finish;
 - allow optional tool failures without blocking the game;
@@ -58,6 +59,8 @@ channel.
 | Wait until a launched trainer window is ready | `[[tools.prepare]]` with `action = "wait-for-window"` |
 | Wait until a standard trainer control is ready | `[[tools.prepare]]` with `action = "wait-for-control"` |
 | Select a standard Win32 ComboBox item by index | `[[tools.prepare]]` with `action = "select-combo-box-index"` |
+| Invoke a standard Win32 push button | `[[tools.prepare]]` with `action = "invoke-button"` |
+| Set a standard Win32 auto-checkbox state | `[[tools.prepare]]` with `action = "set-checkbox-state"` |
 | Open a trainer, configure it, then continue | `before_game_wait = "user-confirmation"` |
 | Run a setup utility and wait for success | `before_game_wait = "tool-exit"` |
 | Prevent the game from starting without a tool | `required = true` |
@@ -167,6 +170,47 @@ reads the prior index, sets and verifies the requested index, sends one standard
 again. An already-selected index is a no-op and sends no notification. This action does not match
 item text, open the list, focus or activate windows, send keyboard or mouse input, invoke other
 controls, use UI Automation, or support custom-drawn controls.
+
+### Invoke a standard Win32 push button
+
+Use this when a directly launched before-game tool exposes a standard push button with a stable
+numeric control ID:
+
+```toml
+[[tools.prepare]]
+action = "invoke-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1002
+timeout_ms = 10000
+```
+
+Tandem requires one unambiguous visible, enabled `Button` control and accepts only
+`BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`. It sends exactly one bounded `BM_CLICK`. Checkbox, radio,
+owner-drawn, custom-drawn, hidden, disabled, and ambiguous targets are rejected. Tandem does not
+activate or focus the window or synthesize keyboard or mouse input.
+
+### Set a standard Win32 auto-checkbox state
+
+Use this when a directly launched before-game tool exposes a standard `BS_AUTOCHECKBOX` with a
+stable numeric control ID and Tandem must guarantee a checked or unchecked state:
+
+```toml
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1003
+checked = true
+timeout_ms = 10000
+```
+
+Tandem reads the current state with bounded `BM_GETCHECK`. If it already matches `checked`, the step
+is a no-op and sends no click. Otherwise Tandem sends one bounded `BM_CLICK`, then reads the state
+again and requires the requested result. Only visible, enabled `BS_AUTOCHECKBOX` controls owned by
+the directly launched tool PID are supported. Manual checkboxes, three-state controls, radio
+buttons, owner-drawn controls, custom UI frameworks, focus changes, and synthesized input are
+rejected or outside scope.
 
 ### Before-game trainer confirmation
 
@@ -290,6 +334,9 @@ licenses and distribution terms for games, trainers, mods, scripts, and other th
 The project does not claim ownership of GameNative, Winlator, Wine, or any software launched
 through Tandem.
 
-## Standard Win32 button invocation
+## Standard Win32 control mutation boundary
 
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.
+Tandem's mutating preparation actions are intentionally narrow: `select-combo-box-index` for
+standard `ComboBox` controls, `invoke-button` for `BS_PUSHBUTTON`/`BS_DEFPUSHBUTTON`, and
+`set-checkbox-state` for `BS_AUTOCHECKBOX`. All remain restricted to the directly launched tool PID,
+unambiguous visible/enabled controls, bounded messages, and operation-specific verification.

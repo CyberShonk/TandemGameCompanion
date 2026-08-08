@@ -110,6 +110,15 @@ pub enum PreparationStepConfig {
         #[serde(default = "default_window_wait_timeout_ms")]
         timeout_ms: u64,
     },
+    SetCheckboxState {
+        window_title_equals: Option<String>,
+        window_title_contains: Option<String>,
+        control_id: Option<u32>,
+        control_class_equals: Option<String>,
+        checked: Option<bool>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
@@ -177,6 +186,12 @@ pub enum PreparationStep {
     InvokeButton {
         window_matcher: WindowTitleMatcher,
         control_selector: ControlSelector,
+        timeout_ms: u64,
+    },
+    SetCheckboxState {
+        window_matcher: WindowTitleMatcher,
+        control_selector: ControlSelector,
+        checked: bool,
         timeout_ms: u64,
     },
 }
@@ -274,6 +289,18 @@ impl PreparationStep {
                 "invoke-button (window {}; {}; runtime class equals \"Button\"; standard push-button style; visible and enabled; timeout={}ms)",
                 window_matcher.description(),
                 control_selector.description(),
+                timeout_ms
+            ),
+            Self::SetCheckboxState {
+                window_matcher,
+                control_selector,
+                checked,
+                timeout_ms,
+            } => format!(
+                "set-checkbox-state (window {}; {}; runtime class equals \"Button\"; BS_AUTOCHECKBOX; checked={}; visible and enabled; timeout={}ms)",
+                window_matcher.description(),
+                control_selector.description(),
+                checked,
                 timeout_ms
             ),
         }
@@ -701,6 +728,81 @@ fn resolve_preparation_step(
                 },
                 timeout_ms: *timeout_ms,
             })
+        }
+        PreparationStepConfig::SetCheckboxState {
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            checked,
+            timeout_ms,
+        } => {
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let window_matcher = resolve_window_title_matcher(
+                &label,
+                "window_title_equals",
+                window_title_equals,
+                "window_title_contains",
+                window_title_contains,
+                problems,
+            );
+            if control_id.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id for deterministic checkbox state preparation"
+                ));
+            }
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {} for set-checkbox-state",
+                        i32::MAX
+                    ));
+                    false
+                }
+                Some(_) => true,
+                None => false,
+            };
+            let class_equals = control_class_equals
+                .as_ref()
+                .and_then(|value| validate_control_class(&label, value, problems));
+            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+            let supported_class = match class_equals.as_deref() {
+                Some("Button") | None => true,
+                Some(_) => {
+                    problems.push(format!(
+                        "{label} control_class_equals must be exactly \"Button\" for set-checkbox-state"
+                    ));
+                    false
+                }
+            };
+            let checked = match checked {
+                Some(value) => Some(*value),
+                None => {
+                    problems.push(format!("{label} must define checked"));
+                    None
+                }
+            };
+            if !timeout_valid
+                || !control_id_valid
+                || !control_class_valid
+                || !supported_class
+                || control_id.is_none()
+                || checked.is_none()
+            {
+                return None;
+            }
+            match (window_matcher, checked) {
+                (Some(window_matcher), Some(checked)) => Some(PreparationStep::SetCheckboxState {
+                    window_matcher,
+                    control_selector: ControlSelector {
+                        id: *control_id,
+                        class_equals,
+                    },
+                    checked,
+                    timeout_ms: *timeout_ms,
+                }),
+                _ => None,
+            }
         }
     }
 }
@@ -1371,6 +1473,42 @@ control_id = 1002
     }
 
     #[test]
+    fn parses_set_checkbox_state_preparation() {
+        let config: Config = toml::from_str(
+            r#"
+config_version = 1
+
+[game]
+name = "Demo Game"
+path = "Game.exe"
+
+[[tools]]
+name = "Trainer"
+path = "Trainer.exe"
+launch = "before-game"
+
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1003
+checked = true
+"#,
+        )
+        .expect("checkbox state preparation should parse");
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::SetCheckboxState {
+                window_title_equals: None,
+                window_title_contains: Some("Trainer".into()),
+                control_id: Some(1003),
+                control_class_equals: Some("Button".into()),
+                checked: Some(true),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+    #[test]
     fn window_title_matchers_match_expected_titles() {
         assert!(WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer"));
         assert!(!WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer 1.0"));
@@ -1454,6 +1592,22 @@ control_id = 1002
         );
     }
 
+    #[test]
+    fn checkbox_state_description_is_deterministic() {
+        let step = PreparationStep::SetCheckboxState {
+            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+            control_selector: ControlSelector {
+                id: Some(1003),
+                class_equals: Some("Button".into()),
+            },
+            checked: true,
+            timeout_ms: 10_000,
+        };
+        assert_eq!(
+            step.description(),
+            "set-checkbox-state (window title contains \"Trainer\"; control ID 1003 and class equals \"Button\"; runtime class equals \"Button\"; BS_AUTOCHECKBOX; checked=true; visible and enabled; timeout=10000ms)"
+        );
+    }
     #[test]
     fn parent_paths_are_external_syntax() {
         assert!(is_external_syntax(Path::new("../Tool.exe")));
@@ -1834,6 +1988,59 @@ selected_index = 2
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn rejects_invalid_checkbox_state_recipes() {
+        let root = test_directory("invalid-checkbox-state");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_equals = "Tool"
+window_title_contains = "Tool"
+control_class_equals = "Button"
+[[tools.prepare]]
+action = "set-checkbox-state"
+window_title_contains = "Tool"
+control_id = 2147483648
+control_class_equals = "ComboBox"
+checked = true
+timeout_ms = 0
+"#,
+        )
+        .expect("configuration should be written");
+        let error =
+            load_and_resolve(&config).expect_err("invalid checkbox state recipes must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains(
+                "must define exactly one of window_title_equals or window_title_contains"
+            )
+        );
+        assert!(
+            message.contains("must define control_id for deterministic checkbox state preparation")
+        );
+        assert!(
+            message.contains("control_id must be between 1 and 2147483647 for set-checkbox-state")
+        );
+        assert!(
+            message
+                .contains("control_class_equals must be exactly \"Button\" for set-checkbox-state")
+        );
+        assert!(message.contains("must define checked"));
+        assert!(message.contains("timeout_ms must be between 1 and 120000"));
+        let _ = fs::remove_dir_all(root);
+    }
     #[test]
     fn rejects_invalid_button_invocation_recipes() {
         let root = test_directory("invalid-button-invocation");

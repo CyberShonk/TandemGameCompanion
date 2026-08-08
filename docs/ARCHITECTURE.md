@@ -33,7 +33,7 @@ cleared for that channel before games or tools are started.
 | `config.rs` | TOML parsing, path validation, file-type checks, and limits |
 | `guardian.rs` | Worker supervision, protocol handling, and fallback game wait |
 | `launcher.rs` | Launch order, preparation policy, waits, process creation, logging, exit propagation, and cleanup |
-| `platform.rs` | Windows process handles, shared PID-scoped window/control discovery, bounded standard ComboBox selection, status-handle protection, and native confirmation UI |
+| `platform.rs` | Windows process handles, shared PID-scoped window/control discovery, bounded allowlisted Win32 control mutations, status-handle protection, and native confirmation UI |
 | `preparation.rs` | Sequential bounded tool-preparation execution and process-exit detection |
 | `protocol.rs` | Reserved worker-to-guardian game-PID record |
 | `error.rs` | Error types and process exit-code mapping |
@@ -53,7 +53,7 @@ cleared for that channel before games or tools are started.
 
 - loads and validates `Tandem.toml`;
 - launches before-game tools;
-- executes sequential bounded window/control preparation against the directly launched process, including the allowlisted standard ComboBox index mutation;
+- executes sequential bounded window/control preparation against the directly launched process, including allowlisted ComboBox selection, push-button invocation, and auto-checkbox state setting;
 - performs user-confirmation or tool-exit waits;
 - starts and reports the game;
 - launches after-game tools;
@@ -72,6 +72,9 @@ The recovery model is deliberately limited. Tandem does not yet provide:
 
 See [Guardian and Worker](GUARDIAN_WORKER.md) for the detailed supervision behavior.
 
-## Standard Win32 button invocation
+## Win32 preparation boundary
 
-Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.
+The worker delegates standard HWND discovery and allowlisted mutation to `platform.rs`. Mutating
+actions are limited to standard ComboBox index selection, push/default-push button invocation, and
+`BS_AUTOCHECKBOX` checked-state transitions. Checkbox transitions read state before and after the
+operation, skip the click when already correct, and otherwise send exactly one bounded `BM_CLICK`.
