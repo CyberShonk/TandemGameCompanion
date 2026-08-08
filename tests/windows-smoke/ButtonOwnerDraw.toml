@@ -1,0 +1,34 @@
+config_version = 1
+
+[launcher]
+log_file = "ButtonOwnerDraw.log"
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Owner-draw Button Tool Game"
+path = "SmokeGame.exe"
+arguments = ["button-ownerdraw-events.txt", "button-ownerdraw-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Owner-draw Button Tool"
+path = "ButtonTool.exe"
+arguments = [
+  "button-ownerdraw-events.txt",
+  "ownerdraw",
+  "Owner-draw Button Trainer",
+  "2001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Owner-draw Button Trainer"
+control_id = 2001
+timeout_ms = 2000

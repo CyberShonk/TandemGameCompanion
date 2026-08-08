@@ -1,0 +1,34 @@
+config_version = 1
+
+[launcher]
+log_file = "ButtonRadio.log"
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Radio Button Tool Game"
+path = "SmokeGame.exe"
+arguments = ["button-radio-events.txt", "button-radio-game-start", "0"]
+working_directory = "."
+
+[[tools]]
+name = "Radio Button Tool"
+path = "ButtonTool.exe"
+arguments = [
+  "button-radio-events.txt",
+  "radio",
+  "Radio Button Trainer",
+  "2001",
+  "0",
+  "0",
+  "5000"
+]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Radio Button Trainer"
+control_id = 2001
+timeout_ms = 2000

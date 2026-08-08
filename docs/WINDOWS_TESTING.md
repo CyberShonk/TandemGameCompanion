@@ -77,6 +77,8 @@ Automated Wine coverage does not replace real-environment testing. Manually veri
 - a successful and timed-out `wait-for-window` preparation;
 - successful and timed-out `wait-for-control` preparation against a real standard Win32 control;
 - `select-combo-box-index` against a real standard ComboBox, including no-op and out-of-range cases;
+- `invoke-button` against real `BS_PUSHBUTTON` and `BS_DEFPUSHBUTTON` controls without foreground activation;
+- rejection of checkbox, radio, owner-drawn, hidden, disabled, wrong-class, and ambiguous button targets;
 - exact PID ownership, parent-window scoping, hidden/disabled filtering, and ID/class AND semantics;
 - the native user-confirmation dialog;
 - touch and controller focus mapping;
@@ -92,3 +94,7 @@ Automated Wine coverage does not replace real-environment testing. Manually veri
 
 Record the environment, device, game, tool, configuration, and relevant `Tandem.log` for every
 compatibility result.
+
+## Standard Win32 button invocation
+
+Tandem supports the bounded `invoke-button` preparation action for a uniquely matched, visible, enabled standard Win32 `Button` control owned by the directly launched tool process. The action requires a numeric `control_id`, accepts only `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`, and sends one bounded `BM_CLICK`. It does not focus or activate windows, synthesize keyboard or mouse input, invoke checkboxes or radio buttons, discover descendant processes, or support custom-drawn controls.

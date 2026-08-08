@@ -1,0 +1,72 @@
+config_version = 1
+
+[game]
+name = "Invalid Button Recipe Game"
+path = "SmokeGame.exe"
+working_directory = "."
+
+[[tools]]
+name = "Ambiguous Button Recipe Tool"
+path = "ButtonTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+
+[[tools]]
+name = "Invalid Button ID Tool"
+path = "ButtonTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 0
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 2147483648
+
+[[tools]]
+name = "Invalid Button Class Tool"
+path = "ButtonTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 2001
+control_class_equals = "ComboBox"
+
+[[tools]]
+name = "Invalid Button Timeout Tool"
+path = "ButtonTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 2001
+timeout_ms = 0
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 2001
+timeout_ms = 120001
+
+[[tools]]
+name = "After-game Button Preparation Tool"
+path = "ButtonTool.exe"
+launch = "after-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 2001
+
+[[tools]]
+name = "CMD Button Preparation Tool"
+path = "BeforeTool.cmd"
+launch = "before-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Trainer"
+control_id = 2001

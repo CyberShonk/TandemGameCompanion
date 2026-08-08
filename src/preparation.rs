@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::{ControlSelector, PreparationStep, WindowTitleMatcher};
 use crate::error::AppError;
-use crate::platform::{self, ComboBoxSelectionStatus};
+use crate::platform::{self, ButtonInvocationStatus, ComboBoxSelectionStatus};
 
 const WINDOW_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -25,6 +25,12 @@ pub enum PreparationOutcome {
         prior_index: Option<u32>,
         resulting_index: u32,
         notification_sent: bool,
+    },
+    ButtonInvoked {
+        window_title: String,
+        control_id: i32,
+        class_name: String,
+        button_style: u32,
     },
 }
 
@@ -60,6 +66,14 @@ impl PreparationOutcome {
                     "selected standard Win32 ComboBox in window {window_title:?} with selector control ID {control_id} and runtime class {class_name:?}: requested index {requested_index}, prior index {prior}, resulting index {resulting_index}, {notification}"
                 )
             }
+            Self::ButtonInvoked {
+                window_title,
+                control_id,
+                class_name,
+                button_style,
+            } => format!(
+                "invoked standard Win32 push button in window {window_title:?} with selector control ID {control_id}, runtime class {class_name:?}, and button type style 0x{button_style:04x} using one bounded BM_CLICK"
+            ),
         }
     }
 }
@@ -96,6 +110,17 @@ pub fn execute(
             window_matcher,
             control_selector,
             *selected_index,
+            *timeout_ms,
+        ),
+        PreparationStep::InvokeButton {
+            window_matcher,
+            control_selector,
+            timeout_ms,
+        } => invoke_button(
+            tool_name,
+            child,
+            window_matcher,
+            control_selector,
             *timeout_ms,
         ),
     }
@@ -219,6 +244,63 @@ fn select_combo_box_index(
             }
         }
 
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            continue;
+        }
+        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
+    }
+}
+
+fn invoke_button(
+    tool_name: &str,
+    child: &mut Child,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    timeout_ms: u64,
+) -> Result<PreparationOutcome, AppError> {
+    let pid = child.id();
+    let timeout = Duration::from_millis(timeout_ms);
+    let started = Instant::now();
+    let selector = format!(
+        "window whose {} and descendant whose {}",
+        window_matcher.description(),
+        control_selector.description()
+    );
+    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
+    loop {
+        detect_tool_exit(tool_name, child, "the requested button was invoked")?;
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            return Err(AppError::runtime(format!(
+                "timed out after {timeout_ms} ms invoking button for companion tool {tool_name}: selector [{selector}], failure reason: {last_pending_reason}"
+            )));
+        }
+        let remaining = timeout - elapsed;
+        let message_timeout_ms =
+            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
+                .unwrap_or(u32::MAX);
+        match platform::invoke_button(
+            pid,
+            window_matcher,
+            control_selector,
+            message_timeout_ms,
+        )
+        .map_err(|error| {
+            AppError::runtime(format!(
+                "could not invoke button for companion tool {tool_name}: selector [{selector}], failure reason: {error}"
+            ))
+        })? {
+            ButtonInvocationStatus::Pending { reason } => last_pending_reason = reason,
+            ButtonInvocationStatus::Complete(result) => {
+                return Ok(PreparationOutcome::ButtonInvoked {
+                    window_title: result.window_title,
+                    control_id: result.control_id,
+                    class_name: result.class_name,
+                    button_style: result.button_style,
+                });
+            }
+        }
         let elapsed = started.elapsed();
         if elapsed >= timeout {
             continue;

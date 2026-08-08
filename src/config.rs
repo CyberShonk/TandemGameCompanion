@@ -102,6 +102,14 @@ pub enum PreparationStepConfig {
         #[serde(default = "default_window_wait_timeout_ms")]
         timeout_ms: u64,
     },
+    InvokeButton {
+        window_title_equals: Option<String>,
+        window_title_contains: Option<String>,
+        control_id: Option<u32>,
+        control_class_equals: Option<String>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
@@ -164,6 +172,11 @@ pub enum PreparationStep {
         window_matcher: WindowTitleMatcher,
         control_selector: ControlSelector,
         selected_index: u32,
+        timeout_ms: u64,
+    },
+    InvokeButton {
+        window_matcher: WindowTitleMatcher,
+        control_selector: ControlSelector,
         timeout_ms: u64,
     },
 }
@@ -251,6 +264,16 @@ impl PreparationStep {
                 window_matcher.description(),
                 control_selector.description(),
                 selected_index,
+                timeout_ms
+            ),
+            Self::InvokeButton {
+                window_matcher,
+                control_selector,
+                timeout_ms,
+            } => format!(
+                "invoke-button (window {}; {}; runtime class equals \"Button\"; standard push-button style; visible and enabled; timeout={}ms)",
+                window_matcher.description(),
+                control_selector.description(),
                 timeout_ms
             ),
         }
@@ -616,6 +639,68 @@ fn resolve_preparation_step(
                 }
                 _ => None,
             }
+        }
+        PreparationStepConfig::InvokeButton {
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            timeout_ms,
+        } => {
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let window_matcher = resolve_window_title_matcher(
+                &label,
+                "window_title_equals",
+                window_title_equals,
+                "window_title_contains",
+                window_title_contains,
+                problems,
+            );
+            if control_id.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id for deterministic button invocation"
+                ));
+            }
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {} for invoke-button",
+                        i32::MAX
+                    ));
+                    false
+                }
+                Some(_) => true,
+                None => false,
+            };
+            let class_equals = control_class_equals
+                .as_ref()
+                .and_then(|value| validate_control_class(&label, value, problems));
+            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+            let supported_class = match class_equals.as_deref() {
+                Some("Button") | None => true,
+                Some(_) => {
+                    problems.push(format!(
+                        "{label} control_class_equals must be exactly \"Button\" for invoke-button"
+                    ));
+                    false
+                }
+            };
+            if !timeout_valid
+                || !control_id_valid
+                || !control_class_valid
+                || !supported_class
+                || control_id.is_none()
+            {
+                return None;
+            }
+            window_matcher.map(|window_matcher| PreparationStep::InvokeButton {
+                window_matcher,
+                control_selector: ControlSelector {
+                    id: *control_id,
+                    class_equals,
+                },
+                timeout_ms: *timeout_ms,
+            })
         }
     }
 }
@@ -1251,6 +1336,41 @@ selected_index = 2
     }
 
     #[test]
+    fn parses_invoke_button_preparation() {
+        let config: Config = toml::from_str(
+            r#"
+config_version = 1
+
+[game]
+name = "Demo Game"
+path = "Game.exe"
+
+[[tools]]
+name = "Trainer"
+path = "Trainer.exe"
+launch = "before-game"
+
+[[tools.prepare]]
+action = "invoke-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 1002
+"#,
+        )
+        .expect("button invocation preparation should parse");
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::InvokeButton {
+                window_title_equals: None,
+                window_title_contains: Some("Trainer".into()),
+                control_id: Some(1002),
+                control_class_equals: Some("Button".into()),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+
+    #[test]
     fn window_title_matchers_match_expected_titles() {
         assert!(WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer"));
         assert!(!WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer 1.0"));
@@ -1315,6 +1435,22 @@ selected_index = 2
         assert_eq!(
             step.description(),
             "select-combo-box-index (window title contains \"Trainer\"; control ID 1001 and class equals \"ComboBox\"; runtime class equals \"ComboBox\"; selected index 2; visible and enabled; timeout=10000ms)"
+        );
+    }
+
+    #[test]
+    fn button_invocation_description_is_deterministic() {
+        let step = PreparationStep::InvokeButton {
+            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+            control_selector: ControlSelector {
+                id: Some(1002),
+                class_equals: Some("Button".into()),
+            },
+            timeout_ms: 10_000,
+        };
+        assert_eq!(
+            step.description(),
+            "invoke-button (window title contains \"Trainer\"; control ID 1002 and class equals \"Button\"; runtime class equals \"Button\"; standard push-button style; visible and enabled; timeout=10000ms)"
         );
     }
 
@@ -1695,6 +1831,53 @@ selected_index = 2
         let message = error.to_string();
         assert!(message.contains("preparation requires launch = \"before-game\""));
         assert!(message.contains("preparation requires a directly launched EXE or COM file"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_invalid_button_invocation_recipes() {
+        let root = test_directory("invalid-button-invocation");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        fs::write(
+            &config,
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_equals = "Tool"
+window_title_contains = "Tool"
+control_class_equals = "Button"
+[[tools.prepare]]
+action = "invoke-button"
+window_title_contains = "Tool"
+control_id = 2147483648
+control_class_equals = "ComboBox"
+timeout_ms = 0
+"#,
+        )
+        .expect("configuration should be written");
+        let error = load_and_resolve(&config)
+            .expect_err("invalid button invocation recipes must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains(
+                "must define exactly one of window_title_equals or window_title_contains"
+            )
+        );
+        assert!(message.contains("must define control_id for deterministic button invocation"));
+        assert!(message.contains("control_id must be between 1 and 2147483647 for invoke-button"));
+        assert!(
+            message.contains("control_class_equals must be exactly \"Button\" for invoke-button")
+        );
+        assert!(message.contains("timeout_ms must be between 1 and 120000"));
         let _ = fs::remove_dir_all(root);
     }
 
