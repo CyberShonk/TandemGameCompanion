@@ -1,0 +1,31 @@
+config_version = 1
+
+[launcher]
+log_file = "EditTextDisabled.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Edit Smoke Game"
+path = "SmokeGame.exe"
+arguments = ["edit-events.txt", "should-not-start", "100", "should-not-start-end"]
+working_directory = "."
+
+[[tools]]
+name = "Edit Disabled Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "disabled", "Disabled Edit Trainer", "4001", "0", "0", "3000"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "none"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Disabled Edit Trainer"
+control_id = 4001
+text = "changed"
+timeout_ms = 500
+control_class_equals = "Edit"

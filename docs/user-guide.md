@@ -199,6 +199,30 @@ timeout boundaries used by other preparation actions still apply. Manual and thr
 radio buttons, owner-drawn controls, focus/activation, synthesized input, and custom controls are not
 supported by this action.
 
+### Set text in a standard single-line Win32 Edit control
+
+```toml
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Trainer"
+control_class_equals = "Edit"
+control_id = 4001
+text = "60"
+timeout_ms = 10000
+```
+
+Use this for stable standard Win32 fields such as a numeric trainer setting. Tandem requires a
+numeric control ID, verifies the runtime class is exactly `Edit`, reads the current value, and skips
+`WM_SETTEXT` when the requested text is already present. Otherwise it sends one bounded
+`WM_SETTEXT` and requires an exact read-back result.
+
+The first version supports visible, enabled, single-line editable controls only. Multiline,
+password, read-only, uppercase/lowercase-transforming, OEM-transforming, custom, hidden, disabled,
+and ambiguous targets are rejected. Empty text is valid. Configured text is limited to 4,096 UTF-16
+units and may not contain NUL, carriage return, or line feed. Tandem reports text lengths rather than
+the configured or existing text content in preparation descriptions and result logs. It does not
+focus the field, activate the window, type keys, use the clipboard, or send Enter or Tab afterward.
+
 ### Trainer configuration before game startup
 
 ```toml

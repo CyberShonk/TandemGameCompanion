@@ -38,7 +38,7 @@ Tandem can:
 - start tools before or after the game;
 - delay tool launches when required;
 - wait for a visible top-level window or visible enabled standard Win32 control owned by a launched before-game tool;
-- perform bounded process-scoped ComboBox selection, push-button invocation, and auto-checkbox state preparation;
+- perform bounded process-scoped ComboBox selection, push-button invocation, auto-checkbox state preparation, and standard single-line Edit text setting;
 - pause for a native confirmation before starting the game;
 - wait for a one-shot setup utility to finish;
 - allow optional tool failures without blocking the game;
@@ -61,6 +61,7 @@ channel.
 | Select a standard Win32 ComboBox item by index | `[[tools.prepare]]` with `action = "select-combo-box-index"` |
 | Invoke a standard Win32 push button | `[[tools.prepare]]` with `action = "invoke-button"` |
 | Set a standard Win32 auto-checkbox state | `[[tools.prepare]]` with `action = "set-checkbox-state"` |
+| Set text in a standard single-line Win32 Edit control | `[[tools.prepare]]` with `action = "set-edit-text"` |
 | Open a trainer, configure it, then continue | `before_game_wait = "user-confirmation"` |
 | Run a setup utility and wait for success | `before_game_wait = "tool-exit"` |
 | Prevent the game from starting without a tool | `required = true` |
@@ -212,6 +213,30 @@ the directly launched tool PID are supported. Manual checkboxes, three-state con
 buttons, owner-drawn controls, custom UI frameworks, focus changes, and synthesized input are
 rejected or outside scope.
 
+### Set text in a standard single-line Win32 Edit control
+
+Use this when a directly launched before-game tool exposes a standard editable `Edit` control with a
+stable numeric control ID:
+
+```toml
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Trainer"
+control_class_equals = "Edit"
+control_id = 4001
+text = "60"
+timeout_ms = 10000
+```
+
+Tandem reads the current text, completes without mutation when it already matches, otherwise sends
+one bounded `WM_SETTEXT`, and reads the control again to require an exact result. The first version
+supports visible, enabled, standard single-line editable controls only. Multiline, password,
+read-only, uppercase/lowercase transforming, OEM-transforming, custom, hidden, disabled, and
+ambiguous targets are rejected. Empty text is allowed. Configured text is limited to 4,096 UTF-16
+units and may not contain NUL, carriage return, or line feed. Preparation descriptions and result
+logs report lengths rather than the configured or existing text content. Tandem does not focus or
+activate the control, synthesize input, use the clipboard, or send a follow-up Enter or Tab.
+
 ### Before-game trainer confirmation
 
 Use this when a trainer must be opened and configured before the game starts:
@@ -337,6 +362,7 @@ through Tandem.
 ## Standard Win32 control mutation boundary
 
 Tandem's mutating preparation actions are intentionally narrow: `select-combo-box-index` for
-standard `ComboBox` controls, `invoke-button` for `BS_PUSHBUTTON`/`BS_DEFPUSHBUTTON`, and
-`set-checkbox-state` for `BS_AUTOCHECKBOX`. All remain restricted to the directly launched tool PID,
-unambiguous visible/enabled controls, bounded messages, and operation-specific verification.
+standard `ComboBox` controls, `invoke-button` for `BS_PUSHBUTTON`/`BS_DEFPUSHBUTTON`,
+`set-checkbox-state` for `BS_AUTOCHECKBOX`, and `set-edit-text` for standard single-line editable
+`Edit` controls. All remain restricted to the directly launched tool PID, unambiguous visible/enabled
+controls, bounded messages, and operation-specific verification.

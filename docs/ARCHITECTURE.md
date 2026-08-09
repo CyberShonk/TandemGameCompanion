@@ -53,7 +53,7 @@ cleared for that channel before games or tools are started.
 
 - loads and validates `Tandem.toml`;
 - launches before-game tools;
-- executes sequential bounded window/control preparation against the directly launched process, including allowlisted ComboBox selection, push-button invocation, and auto-checkbox state setting;
+- executes sequential bounded window/control preparation against the directly launched process, including allowlisted ComboBox selection, push-button invocation, auto-checkbox state setting, and standard single-line Edit text setting;
 - performs user-confirmation or tool-exit waits;
 - starts and reports the game;
 - launches after-game tools;
@@ -75,6 +75,8 @@ See [Guardian and Worker](GUARDIAN_WORKER.md) for the detailed supervision behav
 ## Win32 preparation boundary
 
 The worker delegates standard HWND discovery and allowlisted mutation to `platform.rs`. Mutating
-actions are limited to standard ComboBox index selection, push/default-push button invocation, and
-`BS_AUTOCHECKBOX` checked-state transitions. Checkbox transitions read state before and after the
-operation, skip the click when already correct, and otherwise send exactly one bounded `BM_CLICK`.
+actions are limited to standard ComboBox index selection, push/default-push button invocation,
+`BS_AUTOCHECKBOX` checked-state transitions, and standard single-line editable `Edit` text setting.
+Edit text setting reads the current text, skips `WM_SETTEXT` when already correct, otherwise sends one
+bounded `WM_SETTEXT`, and then requires an exact read-back result. Text contents are not included in
+preparation descriptions or result logs.

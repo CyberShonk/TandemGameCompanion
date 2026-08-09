@@ -30,23 +30,27 @@ Tandem must not:
 - Program paths must resolve to files and working directories must resolve to directories.
 - Recursive Tandem launch is rejected.
 - Tool-count, argument-size, and delay limits are enforced.
-- Preparation recipes are allowlisted, count-limited, and bounded; mutations are limited to standard Win32 ComboBox index selection, push-button invocation, and `BS_AUTOCHECKBOX` state setting.
+- Preparation recipes are allowlisted, count-limited, and bounded; mutations are limited to standard Win32 ComboBox index selection, push-button invocation, `BS_AUTOCHECKBOX` state setting, and standard single-line editable `Edit` text setting.
 - Top-level window discovery accepts only visible windows owned by the exact launched tool PID.
 - Control discovery is restricted to visible, enabled descendant HWNDs under the selected top-level
   window and owned by that same PID.
 - Control selection uses only a numeric control ID, exact Win32 class name, or both with AND
-  semantics. It does not read cross-process control text.
+  semantics. Control text is never used for discovery. `set-edit-text` reads text only after the
+  process, parent window, control ID/class, visibility, enabled state, and runtime class are resolved.
 - ComboBox selection uses only documented `CB_GETCOUNT`, `CB_GETCURSEL`, and `CB_SETCURSEL`
   messages plus one standard `WM_COMMAND`/`CBN_SELCHANGE` notification when the index changes.
 - Push-button invocation accepts only `BS_PUSHBUTTON`/`BS_DEFPUSHBUTTON` and sends one bounded
   `BM_CLICK`. Auto-checkbox state setting accepts only `BS_AUTOCHECKBOX`, reads with bounded
   `BM_GETCHECK`, skips mutation when already correct, otherwise sends one bounded `BM_CLICK`, and
-  verifies the resulting state.
+  verifies the resulting state. Edit text setting accepts only standard single-line editable `Edit`
+  controls, reads with bounded `WM_GETTEXTLENGTH`/`WM_GETTEXT`, sends at most one bounded
+  `WM_SETTEXT`, and requires an exact read-back result.
 - Mutations require one unambiguous parent and control, the expected runtime class and style,
   visible/enabled state, operation-specific before/after verification, and a directly launched PID.
-- Preparation performs no activation, focus, movement, keyboard or mouse input, item-text matching,
-  arbitrary configurable messages, edit changes, radio-button changes, UI Automation, image
-  matching, custom-control mutation, or descendant-process following.
+- Preparation performs no activation, focus, movement, keyboard or mouse input, text-based control
+  discovery, arbitrary configurable messages, multiline/password/read-only/text-transforming Edit
+  mutation, radio-button changes, UI Automation, image matching, custom-control mutation, or
+  descendant-process following.
 - Window and control preparation reject BAT/CMD wrappers and do not follow descendant processes.
 - Existing log targets and parent directories are canonicalized to stop symlink or junction
   escapes.

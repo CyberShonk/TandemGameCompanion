@@ -1,3 +1,5 @@
+#[cfg(windows)]
+use crate::config::MAX_EDIT_TEXT_UTF16_UNITS;
 use crate::config::{ControlSelector, WindowTitleMatcher};
 use crate::error::AppError;
 
@@ -247,6 +249,24 @@ pub struct CheckboxStateChange {
 pub enum CheckboxStateStatus {
     Pending { reason: String },
     Complete(CheckboxStateChange),
+}
+
+#[derive(Debug)]
+pub struct EditTextChange {
+    pub window_title: String,
+    pub control_id: i32,
+    pub class_name: String,
+    pub requested_utf16_units: usize,
+    pub prior_utf16_units: usize,
+    pub resulting_utf16_units: usize,
+    pub changed: bool,
+}
+
+#[derive(Debug)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum EditTextStatus {
+    Pending { reason: String },
+    Complete(EditTextChange),
 }
 
 #[cfg(windows)]
@@ -964,5 +984,214 @@ pub fn set_checkbox_state(
 ) -> Result<CheckboxStateStatus, AppError> {
     Err(AppError::runtime(
         "set-checkbox-state preparation is only available in Windows builds",
+    ))
+}
+
+#[cfg(windows)]
+pub fn set_edit_text(
+    pid: u32,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    requested_text: &str,
+    message_timeout_ms: u32,
+) -> Result<EditTextStatus, AppError> {
+    use std::time::{Duration, Instant};
+    use windows::Win32::UI::WindowsAndMessaging::{GWL_STYLE, GetWindowLongPtrW};
+
+    const WM_SETTEXT: u32 = 0x000C;
+    const WM_GETTEXT: u32 = 0x000D;
+    const WM_GETTEXTLENGTH: u32 = 0x000E;
+    const ES_MULTILINE: u32 = 0x0004;
+    const ES_UPPERCASE: u32 = 0x0008;
+    const ES_LOWERCASE: u32 = 0x0010;
+    const ES_PASSWORD: u32 = 0x0020;
+    const ES_OEMCONVERT: u32 = 0x0400;
+    const ES_READONLY: u32 = 0x0800;
+    let requested_utf16: Vec<u16> = requested_text.encode_utf16().collect();
+    if requested_utf16.len() > MAX_EDIT_TEXT_UTF16_UNITS {
+        return Err(AppError::runtime(format!(
+            "requested edit text exceeds the {MAX_EDIT_TEXT_UTF16_UNITS}-UTF-16-unit runtime limit"
+        )));
+    }
+    if requested_utf16.contains(&0)
+        || requested_text.contains('\r')
+        || requested_text.contains('\n')
+    {
+        return Err(AppError::runtime(
+            "requested edit text contains unsupported NUL, CR, or LF content",
+        ));
+    }
+
+    let windows = matching_top_level_windows(pid, window_matcher)?;
+    let window = match windows.as_slice() {
+        [] => {
+            return Ok(EditTextStatus::Pending {
+                reason: "matching parent window is not available".into(),
+            });
+        }
+        [window] => window,
+        _ => {
+            return Err(AppError::runtime(format!(
+                "ambiguous parent window selector for companion process {pid}: {} visible top-level windows matched {}",
+                windows.len(),
+                window_matcher.description()
+            )));
+        }
+    };
+    let controls = matching_descendant_controls(window.hwnd, pid, control_selector)?;
+    let control = match controls.as_slice() {
+        [] => {
+            return Ok(EditTextStatus::Pending {
+                reason: "matching visible enabled descendant control is not available".into(),
+            });
+        }
+        [control] => control,
+        _ => {
+            return Err(AppError::runtime(format!(
+                "ambiguous control selector in window {:?}: {} visible enabled descendant controls matched {}",
+                window.title,
+                controls.len(),
+                control_selector.description()
+            )));
+        }
+    };
+    if control.class_name != "Edit" {
+        return Err(AppError::runtime(format!(
+            "matched control ID {} in window {:?} has unsupported runtime class {:?}; expected exactly \"Edit\"",
+            control.control_id, window.title, control.class_name
+        )));
+    }
+
+    // SAFETY: the handle was discovered from the directly launched process and remains valid for
+    // this synchronous style query. GWL_STYLE reads metadata and does not mutate the control.
+    let raw_style = unsafe { GetWindowLongPtrW(control.hwnd, GWL_STYLE) } as u32;
+    let rejected_style = raw_style
+        & (ES_MULTILINE | ES_UPPERCASE | ES_LOWERCASE | ES_PASSWORD | ES_OEMCONVERT | ES_READONLY);
+    if rejected_style != 0 {
+        return Err(AppError::runtime(format!(
+            "matched Edit control ID {} in window {:?} has unsupported style flags 0x{rejected_style:04x}; set-edit-text supports only single-line editable controls without password, read-only, or text-transforming styles",
+            control.control_id, window.title
+        )));
+    }
+
+    let deadline = Instant::now() + Duration::from_millis(u64::from(message_timeout_ms.max(1)));
+    let read_text = || -> Result<String, AppError> {
+        let raw_length = send_bounded_window_message(
+            control.hwnd,
+            WM_GETTEXTLENGTH,
+            0,
+            0,
+            deadline,
+            "WM_GETTEXTLENGTH for edit text preparation",
+        )?;
+        let length = usize::try_from(raw_length).map_err(|_| {
+            AppError::runtime(format!(
+                "WM_GETTEXTLENGTH returned invalid length {raw_length} for control ID {} in window {:?}",
+                control.control_id, window.title
+            ))
+        })?;
+        if length > MAX_EDIT_TEXT_UTF16_UNITS {
+            return Err(AppError::runtime(format!(
+                "existing edit text for control ID {} in window {:?} exceeds the {MAX_EDIT_TEXT_UTF16_UNITS}-UTF-16-unit runtime limit",
+                control.control_id, window.title
+            )));
+        }
+        let mut buffer = vec![0_u16; length + 1];
+        // WM_GETTEXT is a system message below WM_USER, so User32 marshals the cross-process buffer
+        // for this synchronous bounded send. The local buffer remains alive through the call.
+        let copied_raw = send_bounded_window_message(
+            control.hwnd,
+            WM_GETTEXT,
+            buffer.len(),
+            buffer.as_mut_ptr() as isize,
+            deadline,
+            "WM_GETTEXT for edit text preparation",
+        )?;
+        let copied = usize::try_from(copied_raw).map_err(|_| {
+            AppError::runtime(format!(
+                "WM_GETTEXT returned invalid length {copied_raw} for control ID {} in window {:?}",
+                control.control_id, window.title
+            ))
+        })?;
+        if copied > length {
+            return Err(AppError::runtime(format!(
+                "WM_GETTEXT copied {copied} UTF-16 units after reporting length {length} for control ID {} in window {:?}",
+                control.control_id, window.title
+            )));
+        }
+        String::from_utf16(&buffer[..copied]).map_err(|_| {
+            AppError::runtime(format!(
+                "WM_GETTEXT returned invalid UTF-16 for control ID {} in window {:?}",
+                control.control_id, window.title
+            ))
+        })
+    };
+
+    let prior_text = read_text()?;
+    let prior_utf16_units = prior_text.encode_utf16().count();
+    if prior_text == requested_text {
+        return Ok(EditTextStatus::Complete(EditTextChange {
+            window_title: window.title.clone(),
+            control_id: control.control_id,
+            class_name: control.class_name.clone(),
+            requested_utf16_units: requested_utf16.len(),
+            prior_utf16_units,
+            resulting_utf16_units: prior_utf16_units,
+            changed: false,
+        }));
+    }
+
+    let mut terminated = requested_utf16.clone();
+    terminated.push(0);
+    // WM_SETTEXT is a system message below WM_USER, so User32 marshals the cross-process string for
+    // this synchronous bounded send. Standard single-line Edit processing emits its normal
+    // EN_UPDATE and EN_CHANGE parent notifications; Tandem does not fabricate extra notifications.
+    let set_result = send_bounded_window_message(
+        control.hwnd,
+        WM_SETTEXT,
+        0,
+        terminated.as_ptr() as isize,
+        deadline,
+        "WM_SETTEXT for edit text preparation",
+    )?;
+    if set_result == 0 {
+        return Err(AppError::runtime(format!(
+            "WM_SETTEXT failed for control ID {} in window {:?}",
+            control.control_id, window.title
+        )));
+    }
+
+    let resulting_text = read_text()?;
+    if resulting_text != requested_text {
+        return Err(AppError::runtime(format!(
+            "edit text verification failed for control ID {} in window {:?}: requested UTF-16 units {}, prior UTF-16 units {}, resulting UTF-16 units {}",
+            control.control_id,
+            window.title,
+            requested_utf16.len(),
+            prior_utf16_units,
+            resulting_text.encode_utf16().count()
+        )));
+    }
+    Ok(EditTextStatus::Complete(EditTextChange {
+        window_title: window.title.clone(),
+        control_id: control.control_id,
+        class_name: control.class_name.clone(),
+        requested_utf16_units: requested_utf16.len(),
+        prior_utf16_units,
+        resulting_utf16_units: resulting_text.encode_utf16().count(),
+        changed: true,
+    }))
+}
+
+#[cfg(not(windows))]
+pub fn set_edit_text(
+    _pid: u32,
+    _window_matcher: &WindowTitleMatcher,
+    _control_selector: &ControlSelector,
+    _requested_text: &str,
+    _message_timeout_ms: u32,
+) -> Result<EditTextStatus, AppError> {
+    Err(AppError::runtime(
+        "set-edit-text preparation is only available in Windows builds",
     ))
 }

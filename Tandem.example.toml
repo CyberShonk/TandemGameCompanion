@@ -84,3 +84,12 @@ close_when_game_exits = true
 # control_class_equals = "Button"
 # checked = true
 # timeout_ms = 10000
+
+# Standard single-line Win32 Edit text preparation example
+# [[tools.prepare]]
+# action = "set-edit-text"
+# window_title_contains = "Trainer"
+# control_id = 4001
+# control_class_equals = "Edit"
+# text = "60"
+# timeout_ms = 10000

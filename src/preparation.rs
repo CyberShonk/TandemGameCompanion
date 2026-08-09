@@ -4,7 +4,9 @@ use std::time::{Duration, Instant};
 
 use crate::config::{ControlSelector, PreparationStep, WindowTitleMatcher};
 use crate::error::AppError;
-use crate::platform::{self, ButtonInvocationStatus, CheckboxStateStatus, ComboBoxSelectionStatus};
+use crate::platform::{
+    self, ButtonInvocationStatus, CheckboxStateStatus, ComboBoxSelectionStatus, EditTextStatus,
+};
 
 const WINDOW_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -41,6 +43,15 @@ pub enum PreparationOutcome {
         prior_checked: bool,
         resulting_checked: bool,
         clicked: bool,
+    },
+    EditTextSet {
+        window_title: String,
+        control_id: i32,
+        class_name: String,
+        requested_utf16_units: usize,
+        prior_utf16_units: usize,
+        resulting_utf16_units: usize,
+        changed: bool,
     },
 }
 
@@ -103,6 +114,24 @@ impl PreparationOutcome {
                     "set standard Win32 auto-checkbox state in window {window_title:?} with selector control ID {control_id}, runtime class {class_name:?}, and button type style 0x{button_style:04x}: requested checked={requested_checked}, prior checked={prior_checked}, resulting checked={resulting_checked}, {mutation}"
                 )
             }
+            Self::EditTextSet {
+                window_title,
+                control_id,
+                class_name,
+                requested_utf16_units,
+                prior_utf16_units,
+                resulting_utf16_units,
+                changed,
+            } => {
+                let mutation = if *changed {
+                    "sent one bounded WM_SETTEXT and verified exact text"
+                } else {
+                    "no WM_SETTEXT; requested text was already set"
+                };
+                format!(
+                    "set standard Win32 Edit text in window {window_title:?} with selector control ID {control_id} and runtime class {class_name:?}: requested UTF-16 units {requested_utf16_units}, prior UTF-16 units {prior_utf16_units}, resulting UTF-16 units {resulting_utf16_units}, {mutation}"
+                )
+            }
         }
     }
 }
@@ -163,6 +192,19 @@ pub fn execute(
             window_matcher,
             control_selector,
             *checked,
+            *timeout_ms,
+        ),
+        PreparationStep::SetEditText {
+            window_matcher,
+            control_selector,
+            text,
+            timeout_ms,
+        } => set_edit_text(
+            tool_name,
+            child,
+            window_matcher,
+            control_selector,
+            text,
             *timeout_ms,
         ),
     }
@@ -417,6 +459,73 @@ fn set_checkbox_state(
         thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
     }
 }
+fn set_edit_text(
+    tool_name: &str,
+    child: &mut Child,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    requested_text: &str,
+    timeout_ms: u64,
+) -> Result<PreparationOutcome, AppError> {
+    let pid = child.id();
+    let timeout = Duration::from_millis(timeout_ms);
+    let started = Instant::now();
+    let selector = format!(
+        "window whose {} and descendant whose {}",
+        window_matcher.description(),
+        control_selector.description()
+    );
+    let requested_utf16_units = requested_text.encode_utf16().count();
+    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
+    loop {
+        detect_tool_exit(
+            tool_name,
+            child,
+            "the requested edit text was set and verified",
+        )?;
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            return Err(AppError::runtime(format!(
+                "timed out after {timeout_ms} ms setting Edit text for companion tool {tool_name}: selector [{selector}], requested UTF-16 units {requested_utf16_units}, failure reason: {last_pending_reason}"
+            )));
+        }
+        let remaining = timeout - elapsed;
+        let message_timeout_ms =
+            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
+                .unwrap_or(u32::MAX);
+        match platform::set_edit_text(
+            pid,
+            window_matcher,
+            control_selector,
+            requested_text,
+            message_timeout_ms,
+        )
+        .map_err(|error| {
+            AppError::runtime(format!(
+                "could not set Edit text for companion tool {tool_name}: selector [{selector}], requested UTF-16 units {requested_utf16_units}, failure reason: {error}"
+            ))
+        })? {
+            EditTextStatus::Pending { reason } => last_pending_reason = reason,
+            EditTextStatus::Complete(result) => {
+                return Ok(PreparationOutcome::EditTextSet {
+                    window_title: result.window_title,
+                    control_id: result.control_id,
+                    class_name: result.class_name,
+                    requested_utf16_units: result.requested_utf16_units,
+                    prior_utf16_units: result.prior_utf16_units,
+                    resulting_utf16_units: result.resulting_utf16_units,
+                    changed: result.changed,
+                });
+            }
+        }
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            continue;
+        }
+        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
+    }
+}
+
 fn wait_until_ready(
     tool_name: &str,
     child: &mut Child,
