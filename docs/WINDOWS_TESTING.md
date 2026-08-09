@@ -42,9 +42,10 @@ machines and directories.
 
 ```bash
 ./scripts/test-windows.sh
+./scripts/test-edit-text-windows.sh
 ```
 
-A successful run covers:
+A successful complete run covers:
 
 - Windows-target Rust tests;
 - release compilation;
@@ -59,7 +60,10 @@ A successful run covers:
 - item-count validation, current/result index verification, one `CBN_SELCHANGE` parent notification,
   and no notification for an already-selected index;
 - invalid-recipe, ambiguity, out-of-range, direct-tool-exit, required-failure, and optional-failure paths;
-- sequential window, control, ComboBox, push-button, and auto-checkbox preparation;
+- sequential window, control, ComboBox, push-button, auto-checkbox, and standard Edit preparation;
+- standard single-line Edit text changes, already-correct no-op behavior, Unicode text, and empty-string clearing;
+- exact Edit read-back verification, normal `EN_UPDATE`/`EN_CHANGE` notifications, and text-content redaction from preparation/result logs;
+- Edit PID/parent/control isolation plus rejection of hidden, disabled, multiline, password, read-only, case-transforming, OEM-transforming, wrong-class, and ambiguous targets;
 - control preparation tool-exit detection plus required and optional timeout paths;
 - before-game `tool-exit` waiting;
 - after-game delays;
@@ -81,6 +85,8 @@ Automated Wine coverage does not replace real-environment testing. Manually veri
 - rejection of checkbox, radio, owner-drawn, hidden, disabled, wrong-class, and ambiguous button targets;
 - `set-checkbox-state` against a real `BS_AUTOCHECKBOX`, covering unchecked-to-checked, checked-to-unchecked, and already-correct no-op states;
 - rejection of manual, three-state, radio, owner-drawn, hidden, disabled, wrong-class, and ambiguous checkbox targets;
+- `set-edit-text` against a real standard single-line editable `Edit`, covering changed, already-correct, empty, and Unicode values;
+- rejection of multiline, password, read-only, uppercase/lowercase-transforming, OEM-transforming, hidden, disabled, wrong-class, and ambiguous Edit targets;
 - exact PID ownership, parent-window scoping, hidden/disabled filtering, and ID/class AND semantics;
 - the native user-confirmation dialog;
 - touch and controller focus mapping;

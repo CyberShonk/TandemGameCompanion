@@ -23,7 +23,7 @@ Unit tests cover:
 
 - CLI parsing;
 - TOML defaults;
-- wait-mode and preparation-recipe validation, including ComboBox index, timeout, process, and wrapper boundaries;
+- wait-mode and preparation-recipe validation, including ComboBox index, Edit text limits/redaction, timeout, process, and wrapper boundaries;
 - title-matcher and control-selector behavior, including ID/class AND semantics;
 - path and file-type validation;
 - log escape and overlap protection;
@@ -66,9 +66,10 @@ The documentation does not hardcode a total test count because it changes as cov
 
 ```bash
 ./scripts/test-windows.sh
+./scripts/test-edit-text-windows.sh
 ```
 
-The smoke harness:
+The main smoke harness:
 
 1. runs Windows-target tests through Wine;
 2. builds the x86-64 Windows MSVC executable;
@@ -89,6 +90,11 @@ The smoke harness:
 16. checks sequential preparation plus before-game and after-game ordering;
 17. confirms existing wait and guardian behavior; and
 18. simulates worker failure after game startup to verify guardian lifetime and exit status.
+
+The dedicated Edit-control smoke harness then verifies standard single-line text changes, already-
+correct no-op behavior, empty-string clearing, Unicode text, `EN_UPDATE`/`EN_CHANGE`, runtime log
+redaction, PID/parent/control isolation, unsupported Edit styles, wrong runtime class, ambiguity,
+required and optional failures, timeout behavior, and direct tool-exit detection.
 
 See [Windows Testing](WINDOWS_TESTING.md) for prerequisites.
 

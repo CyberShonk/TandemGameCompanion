@@ -110,6 +110,20 @@ Manual `BS_CHECKBOX`, three-state, radio, owner-drawn, custom-drawn, and framewo
 are intentionally rejected. If the requested state already matches, success is a no-op. Otherwise a
 real transition sends one bounded `BM_CLICK` and must verify the new state with `BM_GETCHECK`.
 
+## A `set-edit-text` preparation step fails
+
+Check `Tandem.log` for the parent selector, numeric control ID, runtime class, style rejection, UTF-16
+lengths, and failure reason. The target must be one visible, enabled standard `Edit` owned by the
+directly launched tool PID. `ES_MULTILINE`, `ES_PASSWORD`, `ES_READONLY`, `ES_UPPERCASE`,
+`ES_LOWERCASE`, and `ES_OEMCONVERT` are intentionally rejected.
+
+An already-correct value is successful without `WM_SETTEXT`. A real change sends one bounded
+`WM_SETTEXT` and then requires an exact read-back. Empty text is supported; configured text over
+4,096 UTF-16 units or containing NUL, carriage return, or line feed is rejected. Preparation and
+result logs report text lengths rather than the actual configured or existing text. RichEdit,
+custom-drawn/framework controls, descendant-process UIs, focus/activation, synthesized input, the
+clipboard, and follow-up Enter/Tab input remain outside this action's scope.
+
 ## A required setup utility stops the session
 
 With:

@@ -82,7 +82,7 @@ timeout_ms = 10000
 | tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
 | tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
 | tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
-| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, `select-combo-box-index`, `invoke-button`, or `set-checkbox-state` |
+| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, `select-combo-box-index`, `invoke-button`, `set-checkbox-state`, or `set-edit-text` |
 | `wait-for-window` | `title_equals` | unset | Exact case-sensitive top-level window-title match |
 | `wait-for-window` | `title_contains` | unset | Case-sensitive top-level window-title substring match |
 | `wait-for-control` | `window_title_equals` | unset | Exact case-sensitive parent top-level window title |
@@ -101,6 +101,10 @@ timeout_ms = 10000
 | `set-checkbox-state` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
 | `set-checkbox-state` | `control_class_equals` | unset | When present, must be exactly `Button`; runtime class is always verified |
 | `set-checkbox-state` | `checked` | required | Boolean requested state (`true` or `false`) |
+| `set-edit-text` | `window_title_equals` / `window_title_contains` | exactly one | Parent top-level window selector |
+| `set-edit-text` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
+| `set-edit-text` | `control_class_equals` | unset | When present, must be exactly `Edit`; runtime class is always verified |
+| `set-edit-text` | `text` | required | Exact requested text; empty is allowed; maximum 4,096 UTF-16 units; NUL/CR/LF rejected |
 | tool preparation | `timeout_ms` | `10000` | Bounded wait from 1 to 120,000 ms |
 
 ## Tool preparation recipes
@@ -218,6 +222,36 @@ If the state already matches, the step completes without clicking. Otherwise it 
 `BM_CLICK`, then reads the state again and requires the requested result. Manual checkboxes,
 three-state controls, radio buttons, owner-drawn controls, custom-drawn controls, ambiguous matches,
 and descendant-process UIs are unsupported.
+
+### `set-edit-text`
+
+```toml
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Trainer"
+control_class_equals = "Edit"
+control_id = 4001
+text = "60"
+timeout_ms = 10000
+```
+
+`control_id` and `text` are required. `control_class_equals` is optional, but when present it must be
+exactly `Edit`; Tandem always verifies the actual runtime class before reading or changing text.
+Discovery still requires one visible parent and one visible, enabled descendant owned by the directly
+launched PID.
+
+The configured text may be empty, is limited to 4,096 UTF-16 units, and may not contain NUL, carriage
+return, or line feed. Tandem rejects `ES_MULTILINE`, `ES_PASSWORD`, `ES_READONLY`, `ES_UPPERCASE`,
+`ES_LOWERCASE`, and `ES_OEMCONVERT`. It reads the current value with bounded
+`WM_GETTEXTLENGTH`/`WM_GETTEXT`. An already-correct value is a no-op. Otherwise Tandem sends one
+bounded `WM_SETTEXT`, then reads the value again and requires an exact match. Standard Edit handling
+provides the normal `EN_UPDATE` and `EN_CHANGE` parent notifications; Tandem does not fabricate
+additional notifications.
+
+The configured, prior, and resulting text content is not included in preparation descriptions or
+result logs; those surfaces report UTF-16 lengths. This action does not discover controls by text,
+focus or activate the window, synthesize keyboard or mouse input, use the clipboard, send Enter or
+Tab, support RichEdit/custom frameworks, or follow descendant processes.
 
 A required tool or a globally strict optional-tool policy fails the session when preparation times
 out, the tool exits before a match appears, or discovery reports an error. With

@@ -13,6 +13,7 @@ const MAX_WINDOW_WAIT_MS: u64 = 120_000;
 const MAX_WINDOW_TITLE_CHARS: usize = 256;
 const MAX_CONTROL_CLASS_CHARS: usize = 256;
 const MAX_COMBO_BOX_INDEX: i64 = 1_000_000;
+pub(crate) const MAX_EDIT_TEXT_UTF16_UNITS: usize = 4_096;
 const MAX_ARGUMENT_BYTES: usize = 16 * 1024;
 const DEFAULT_WINDOW_WAIT_TIMEOUT_MS: u64 = 10_000;
 
@@ -119,6 +120,15 @@ pub enum PreparationStepConfig {
         #[serde(default = "default_window_wait_timeout_ms")]
         timeout_ms: u64,
     },
+    SetEditText {
+        window_title_equals: Option<String>,
+        window_title_contains: Option<String>,
+        control_id: Option<u32>,
+        control_class_equals: Option<String>,
+        text: Option<String>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
@@ -192,6 +202,12 @@ pub enum PreparationStep {
         window_matcher: WindowTitleMatcher,
         control_selector: ControlSelector,
         checked: bool,
+        timeout_ms: u64,
+    },
+    SetEditText {
+        window_matcher: WindowTitleMatcher,
+        control_selector: ControlSelector,
+        text: String,
         timeout_ms: u64,
     },
 }
@@ -301,6 +317,18 @@ impl PreparationStep {
                 window_matcher.description(),
                 control_selector.description(),
                 checked,
+                timeout_ms
+            ),
+            Self::SetEditText {
+                window_matcher,
+                control_selector,
+                text,
+                timeout_ms,
+            } => format!(
+                "set-edit-text (window {}; {}; runtime class equals \"Edit\"; single-line editable control; text UTF-16 units={}; visible and enabled; timeout={}ms)",
+                window_matcher.description(),
+                control_selector.description(),
+                text.encode_utf16().count(),
                 timeout_ms
             ),
         }
@@ -804,6 +832,101 @@ fn resolve_preparation_step(
                 _ => None,
             }
         }
+        PreparationStepConfig::SetEditText {
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            text,
+            timeout_ms,
+        } => {
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let window_matcher = resolve_window_title_matcher(
+                &label,
+                "window_title_equals",
+                window_title_equals,
+                "window_title_contains",
+                window_title_contains,
+                problems,
+            );
+            if control_id.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id for deterministic edit text preparation"
+                ));
+            }
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {} for set-edit-text",
+                        i32::MAX
+                    ));
+                    false
+                }
+                Some(_) => true,
+                None => false,
+            };
+            let class_equals = control_class_equals
+                .as_ref()
+                .and_then(|value| validate_control_class(&label, value, problems));
+            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+            let supported_class = match class_equals.as_deref() {
+                Some("Edit") | None => true,
+                Some(_) => {
+                    problems.push(format!(
+                        "{label} control_class_equals must be exactly \"Edit\" for set-edit-text"
+                    ));
+                    false
+                }
+            };
+            let text = match text {
+                Some(value) => {
+                    let utf16_units = value.encode_utf16().count();
+                    if value.contains('\0') {
+                        problems.push(format!(
+                            "{label} text may not contain NUL for set-edit-text"
+                        ));
+                        None
+                    } else if value.contains('\r') || value.contains('\n') {
+                        problems.push(format!(
+                            "{label} text may not contain CR or LF for single-line set-edit-text"
+                        ));
+                        None
+                    } else if utf16_units > MAX_EDIT_TEXT_UTF16_UNITS {
+                        problems.push(format!(
+                            "{label} text exceeds the {MAX_EDIT_TEXT_UTF16_UNITS}-UTF-16-unit limit for set-edit-text"
+                        ));
+                        None
+                    } else {
+                        Some(value.clone())
+                    }
+                }
+                None => {
+                    problems.push(format!("{label} must define text for set-edit-text"));
+                    None
+                }
+            };
+            if !timeout_valid
+                || !control_id_valid
+                || !control_class_valid
+                || !supported_class
+                || control_id.is_none()
+                || text.is_none()
+            {
+                return None;
+            }
+            match (window_matcher, text) {
+                (Some(window_matcher), Some(text)) => Some(PreparationStep::SetEditText {
+                    window_matcher,
+                    control_selector: ControlSelector {
+                        id: *control_id,
+                        class_equals,
+                    },
+                    text,
+                    timeout_ms: *timeout_ms,
+                }),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -1234,9 +1357,9 @@ fn default_window_wait_timeout_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        BeforeGameWait, Config, ControlSelector, LaunchTiming, PreparationStep,
-        PreparationStepConfig, WindowTitleMatcher, contains_cmd_metacharacters, is_external_syntax,
-        load_and_resolve,
+        BeforeGameWait, Config, ControlSelector, LaunchTiming, MAX_EDIT_TEXT_UTF16_UNITS,
+        PreparationStep, PreparationStepConfig, WindowTitleMatcher, contains_cmd_metacharacters,
+        is_external_syntax, load_and_resolve, resolve_preparation_step,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1509,6 +1632,40 @@ checked = true
         );
     }
     #[test]
+    fn parses_set_edit_text_preparation() {
+        let config: Config = toml::from_str(
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Trainer"
+control_id = 4001
+control_class_equals = "Edit"
+text = "60"
+"#,
+        )
+        .expect("set-edit-text preparation should parse");
+
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::SetEditText {
+                window_title_equals: None,
+                window_title_contains: Some("Trainer".into()),
+                control_id: Some(4001),
+                control_class_equals: Some("Edit".into()),
+                text: Some("60".into()),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+
+    #[test]
     fn window_title_matchers_match_expected_titles() {
         assert!(WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer"));
         assert!(!WindowTitleMatcher::Equals("Trainer".into()).matches("Trainer 1.0"));
@@ -1608,6 +1765,25 @@ checked = true
             "set-checkbox-state (window title contains \"Trainer\"; control ID 1003 and class equals \"Button\"; runtime class equals \"Button\"; BS_AUTOCHECKBOX; checked=true; visible and enabled; timeout=10000ms)"
         );
     }
+    #[test]
+    fn edit_text_description_is_deterministic_and_redacts_content() {
+        let step = PreparationStep::SetEditText {
+            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+            control_selector: ControlSelector {
+                id: Some(4001),
+                class_equals: Some("Edit".into()),
+            },
+            text: "secret-value".into(),
+            timeout_ms: 10_000,
+        };
+        let description = step.description();
+        assert_eq!(
+            description,
+            "set-edit-text (window title contains \"Trainer\"; control ID 4001 and class equals \"Edit\"; runtime class equals \"Edit\"; single-line editable control; text UTF-16 units=12; visible and enabled; timeout=10000ms)"
+        );
+        assert!(!description.contains("secret-value"));
+    }
+
     #[test]
     fn parent_paths_are_external_syntax() {
         assert!(is_external_syntax(Path::new("../Tool.exe")));
@@ -1985,6 +2161,85 @@ selected_index = 2
         let message = error.to_string();
         assert!(message.contains("preparation requires launch = \"before-game\""));
         assert!(message.contains("preparation requires a directly launched EXE or COM file"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_nul_in_edit_text_configuration() {
+        let mut problems = Vec::new();
+        let step = PreparationStepConfig::SetEditText {
+            window_title_equals: Some("Tool".into()),
+            window_title_contains: None,
+            control_id: Some(4001),
+            control_class_equals: Some("Edit".into()),
+            text: Some("before\0after".into()),
+            timeout_ms: 10_000,
+        };
+        let resolved = resolve_preparation_step("Tool", 0, &step, &mut problems);
+        assert!(resolved.is_none());
+        assert!(
+            problems
+                .iter()
+                .any(|problem| problem.contains("text may not contain NUL for set-edit-text"))
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_edit_text_recipes() {
+        let root = test_directory("invalid-edit-text");
+        fs::write(root.join("Game"), "game").expect("game should be written");
+        fs::write(root.join("Tool"), "tool").expect("tool should be written");
+        let config = root.join("Tandem.toml");
+        let too_long = "x".repeat(MAX_EDIT_TEXT_UTF16_UNITS + 1);
+        fs::write(
+            &config,
+            format!(
+                r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Tool"
+window_title_contains = "Tool"
+control_class_equals = "Edit"
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Tool"
+control_id = 2147483648
+control_class_equals = "Button"
+text = "line\nfeed"
+timeout_ms = 0
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Tool"
+control_id = 4001
+text = {too_long:?}
+"#
+            ),
+        )
+        .expect("configuration should be written");
+        let error =
+            load_and_resolve(&config).expect_err("invalid edit text recipes must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains(
+                "must define exactly one of window_title_equals or window_title_contains"
+            )
+        );
+        assert!(message.contains("must define control_id for deterministic edit text preparation"));
+        assert!(message.contains("control_id must be between 1 and 2147483647 for set-edit-text"));
+        assert!(
+            message.contains("control_class_equals must be exactly \"Edit\" for set-edit-text")
+        );
+        assert!(message.contains("must define text for set-edit-text"));
+        assert!(message.contains("text may not contain CR or LF for single-line set-edit-text"));
+        assert!(message.contains("text exceeds the 4096-UTF-16-unit limit for set-edit-text"));
+        assert!(message.contains("timeout_ms must be between 1 and 120000"));
         let _ = fs::remove_dir_all(root);
     }
 

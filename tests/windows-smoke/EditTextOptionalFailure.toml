@@ -1,0 +1,31 @@
+config_version = 1
+
+[launcher]
+log_file = "EditTextOptionalFailure.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Edit Smoke Game"
+path = "SmokeGame.exe"
+arguments = ["edit-events.txt", "edit-optional-game-start", "100", "edit-optional-game-start-end"]
+working_directory = "."
+
+[[tools]]
+name = "Edit Optional Failure Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "readonly", "Optional Readonly Edit Trainer", "4001", "0", "0", "3000"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "none"
+delay_ms = 0
+required = false
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Optional Readonly Edit Trainer"
+control_id = 4001
+control_class_equals = "Edit"
+text = "changed"
+timeout_ms = 2000

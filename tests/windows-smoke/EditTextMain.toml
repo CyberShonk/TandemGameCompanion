@@ -1,0 +1,130 @@
+config_version = 1
+
+[launcher]
+log_file = "EditTextMain.log"
+allow_external_paths = false
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Edit Smoke Game"
+path = "SmokeGame.exe"
+arguments = ["edit-events.txt", "edit-main-game-start", "100", "edit-main-game-start-end"]
+working_directory = "."
+
+[[tools]]
+name = "Edit Impostor Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "impostor", "Scoped Edit Trainer", "4001", "0", "0", "2500"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "none"
+delay_ms = 0
+required = true
+close_when_game_exits = true
+
+[[tools]]
+name = "Scoped Edit Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "scoped", "Scoped Edit Trainer", "4001", "250", "250", "5000"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 500
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "wait-for-window"
+title_equals = "Scoped Edit Trainer"
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "wait-for-control"
+window_title_equals = "Scoped Edit Trainer"
+control_id = 4001
+control_class_equals = "Edit"
+timeout_ms = 5000
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_contains = "Scoped Edit Trainer"
+control_id = 4001
+control_class_equals = "Edit"
+text = "60"
+timeout_ms = 5000
+
+[[tools]]
+name = "Edit No-op Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "noop", "Already Correct Edit Trainer", "4002", "0", "0", "700"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 150
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Already Correct Edit Trainer"
+control_id = 4002
+control_class_equals = "Edit"
+text = "same-value"
+timeout_ms = 5000
+
+[[tools]]
+name = "Edit Unicode Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "unicode", "Unicode Edit Trainer", "4003", "0", "0", "3000"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 100
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Unicode Edit Trainer"
+control_id = 4003
+control_class_equals = "Edit"
+text = "Café Ω 🎮"
+timeout_ms = 5000
+
+[[tools]]
+name = "Edit Clear Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "clear", "Clear Edit Trainer", "4004", "0", "0", "3000"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 100
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Clear Edit Trainer"
+control_id = 4004
+control_class_equals = "Edit"
+text = ""
+timeout_ms = 5000
+
+[[tools]]
+name = "Edit Redaction Tool"
+path = "EditTool.exe"
+arguments = ["edit-events.txt", "redaction", "Redaction Edit Trainer", "4005", "0", "0", "3000"]
+working_directory = "."
+launch = "before-game"
+before_game_wait = "tool-exit"
+delay_ms = 100
+required = true
+close_when_game_exits = false
+
+[[tools.prepare]]
+action = "set-edit-text"
+window_title_equals = "Redaction Edit Trainer"
+control_id = 4005
+control_class_equals = "Edit"
+text = "runtime-secret-sentinel-4a913"
+timeout_ms = 5000
