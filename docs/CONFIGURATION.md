@@ -82,7 +82,7 @@ timeout_ms = 10000
 | tool | `delay_ms` | `0` | Delay before launch, up to 600,000 ms |
 | tool | `required` | `false` | Makes launch failure, or a waited nonzero exit, fail the session |
 | tool | `close_when_game_exits` | `false` | Terminates the directly launched child after normal game exit |
-| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, `select-combo-box-index`, `invoke-button`, `set-checkbox-state`, or `set-edit-text` |
+| tool preparation | `action` | required | `wait-for-window`, `wait-for-control`, `select-combo-box-index`, `invoke-button`, `set-checkbox-state`, `select-radio-button`, or `set-edit-text` |
 | `wait-for-window` | `title_equals` | unset | Exact case-sensitive top-level window-title match |
 | `wait-for-window` | `title_contains` | unset | Case-sensitive top-level window-title substring match |
 | `wait-for-control` | `window_title_equals` | unset | Exact case-sensitive parent top-level window title |
@@ -101,6 +101,9 @@ timeout_ms = 10000
 | `set-checkbox-state` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
 | `set-checkbox-state` | `control_class_equals` | unset | When present, must be exactly `Button`; runtime class is always verified |
 | `set-checkbox-state` | `checked` | required | Boolean requested state (`true` or `false`) |
+| `select-radio-button` | `window_title_equals` / `window_title_contains` | exactly one | Parent top-level window selector |
+| `select-radio-button` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
+| `select-radio-button` | `control_class_equals` | unset | When present, must be exactly `Button`; runtime class is always verified |
 | `set-edit-text` | `window_title_equals` / `window_title_contains` | exactly one | Parent top-level window selector |
 | `set-edit-text` | `control_id` | required | Numeric ID from 1 to 2,147,483,647 |
 | `set-edit-text` | `control_class_equals` | unset | When present, must be exactly `Edit`; runtime class is always verified |
@@ -222,6 +225,28 @@ If the state already matches, the step completes without clicking. Otherwise it 
 `BM_CLICK`, then reads the state again and requires the requested result. Manual checkboxes,
 three-state controls, radio buttons, owner-drawn controls, custom-drawn controls, ambiguous matches,
 and descendant-process UIs are unsupported.
+
+### `select-radio-button`
+
+```toml
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 5002
+timeout_ms = 10000
+```
+
+`control_id` is required. Tandem verifies that the runtime class is exactly `Button` and the button
+type is exactly `BS_AUTORADIOBUTTON`. It reads the target state with bounded `BM_GETCHECK`. If the
+target is already selected, the step completes without clicking. Otherwise Tandem sends one bounded
+`BM_CLICK`, then reads the target again and requires `BST_CHECKED`.
+
+The action relies on standard `BS_AUTORADIOBUTTON` group behavior for sibling clearing; Tandem does
+not enumerate or directly change sibling radio buttons. Manual `BS_RADIOBUTTON`, checkbox,
+push/default-push, three-state, owner-drawn, custom-drawn, ambiguous, hidden, disabled, wrong-class,
+and descendant-process targets are unsupported. The action does not focus or activate a window or
+synthesize keyboard or mouse input.
 
 ### `set-edit-text`
 

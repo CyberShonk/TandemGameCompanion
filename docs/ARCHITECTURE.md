@@ -53,7 +53,7 @@ cleared for that channel before games or tools are started.
 
 - loads and validates `Tandem.toml`;
 - launches before-game tools;
-- executes sequential bounded window/control preparation against the directly launched process, including allowlisted ComboBox selection, push-button invocation, auto-checkbox state setting, and standard single-line Edit text setting;
+- executes sequential bounded window/control preparation against the directly launched process, including allowlisted ComboBox selection, push-button invocation, auto-checkbox state setting, auto-radio-button selection, and standard single-line Edit text setting;
 - performs user-confirmation or tool-exit waits;
 - starts and reports the game;
 - launches after-game tools;
@@ -76,7 +76,10 @@ See [Guardian and Worker](GUARDIAN_WORKER.md) for the detailed supervision behav
 
 The worker delegates standard HWND discovery and allowlisted mutation to `platform.rs`. Mutating
 actions are limited to standard ComboBox index selection, push/default-push button invocation,
-`BS_AUTOCHECKBOX` checked-state transitions, and standard single-line editable `Edit` text setting.
-Edit text setting reads the current text, skips `WM_SETTEXT` when already correct, otherwise sends one
+`BS_AUTOCHECKBOX` checked-state transitions, `BS_AUTORADIOBUTTON` selection, and standard single-line
+editable `Edit` text setting. Radio selection reads the target state, skips `BM_CLICK` when already
+selected, otherwise sends one bounded click and requires the target to become checked; sibling state
+is left to standard automatic radio-group behavior. Edit text setting reads the current text, skips
+`WM_SETTEXT` when already correct, otherwise sends one
 bounded `WM_SETTEXT`, and then requires an exact read-back result. Text contents are not included in
 preparation descriptions or result logs.

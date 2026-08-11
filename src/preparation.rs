@@ -6,6 +6,7 @@ use crate::config::{ControlSelector, PreparationStep, WindowTitleMatcher};
 use crate::error::AppError;
 use crate::platform::{
     self, ButtonInvocationStatus, CheckboxStateStatus, ComboBoxSelectionStatus, EditTextStatus,
+    RadioButtonSelectionStatus,
 };
 
 const WINDOW_POLL_INTERVAL: Duration = Duration::from_millis(50);
@@ -42,6 +43,15 @@ pub enum PreparationOutcome {
         requested_checked: bool,
         prior_checked: bool,
         resulting_checked: bool,
+        clicked: bool,
+    },
+    RadioButtonSelected {
+        window_title: String,
+        control_id: i32,
+        class_name: String,
+        button_style: u32,
+        prior_selected: bool,
+        resulting_selected: bool,
         clicked: bool,
     },
     EditTextSet {
@@ -112,6 +122,24 @@ impl PreparationOutcome {
                 };
                 format!(
                     "set standard Win32 auto-checkbox state in window {window_title:?} with selector control ID {control_id}, runtime class {class_name:?}, and button type style 0x{button_style:04x}: requested checked={requested_checked}, prior checked={prior_checked}, resulting checked={resulting_checked}, {mutation}"
+                )
+            }
+            Self::RadioButtonSelected {
+                window_title,
+                control_id,
+                class_name,
+                button_style,
+                prior_selected,
+                resulting_selected,
+                clicked,
+            } => {
+                let mutation = if *clicked {
+                    "sent one bounded BM_CLICK and verified selected state"
+                } else {
+                    "no click; radio button was already selected"
+                };
+                format!(
+                    "selected standard Win32 auto-radio button in window {window_title:?} with selector control ID {control_id}, runtime class {class_name:?}, and button type style 0x{button_style:04x}: prior selected={prior_selected}, resulting selected={resulting_selected}, {mutation}"
                 )
             }
             Self::EditTextSet {
@@ -192,6 +220,17 @@ pub fn execute(
             window_matcher,
             control_selector,
             *checked,
+            *timeout_ms,
+        ),
+        PreparationStep::SelectRadioButton {
+            window_matcher,
+            control_selector,
+            timeout_ms,
+        } => select_radio_button(
+            tool_name,
+            child,
+            window_matcher,
+            control_selector,
             *timeout_ms,
         ),
         PreparationStep::SetEditText {
@@ -448,6 +487,69 @@ fn set_checkbox_state(
                     requested_checked: result.requested_checked,
                     prior_checked: result.prior_checked,
                     resulting_checked: result.resulting_checked,
+                    clicked: result.clicked,
+                });
+            }
+        }
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            continue;
+        }
+        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
+    }
+}
+fn select_radio_button(
+    tool_name: &str,
+    child: &mut Child,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    timeout_ms: u64,
+) -> Result<PreparationOutcome, AppError> {
+    let pid = child.id();
+    let timeout = Duration::from_millis(timeout_ms);
+    let started = Instant::now();
+    let selector = format!(
+        "window whose {} and descendant whose {}",
+        window_matcher.description(),
+        control_selector.description()
+    );
+    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
+    loop {
+        detect_tool_exit(
+            tool_name,
+            child,
+            "the requested radio button was selected and verified",
+        )?;
+        let elapsed = started.elapsed();
+        if elapsed >= timeout {
+            return Err(AppError::runtime(format!(
+                "timed out after {timeout_ms} ms selecting radio button for companion tool {tool_name}: selector [{selector}], failure reason: {last_pending_reason}"
+            )));
+        }
+        let remaining = timeout - elapsed;
+        let message_timeout_ms =
+            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
+                .unwrap_or(u32::MAX);
+        match platform::select_radio_button(
+            pid,
+            window_matcher,
+            control_selector,
+            message_timeout_ms,
+        )
+        .map_err(|error| {
+            AppError::runtime(format!(
+                "could not select radio button for companion tool {tool_name}: selector [{selector}], failure reason: {error}"
+            ))
+        })? {
+            RadioButtonSelectionStatus::Pending { reason } => last_pending_reason = reason,
+            RadioButtonSelectionStatus::Complete(result) => {
+                return Ok(PreparationOutcome::RadioButtonSelected {
+                    window_title: result.window_title,
+                    control_id: result.control_id,
+                    class_name: result.class_name,
+                    button_style: result.button_style,
+                    prior_selected: result.prior_selected,
+                    resulting_selected: result.resulting_selected,
                     clicked: result.clicked,
                 });
             }

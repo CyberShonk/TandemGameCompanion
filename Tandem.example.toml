@@ -85,6 +85,14 @@ close_when_game_exits = true
 # checked = true
 # timeout_ms = 10000
 
+# Standard Win32 auto-radio-button selection example
+# [[tools.prepare]]
+# action = "select-radio-button"
+# window_title_contains = "Trainer"
+# control_id = 5002
+# control_class_equals = "Button"
+# timeout_ms = 10000
+
 # Standard single-line Win32 Edit text preparation example
 # [[tools.prepare]]
 # action = "set-edit-text"

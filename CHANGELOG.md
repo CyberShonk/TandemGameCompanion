@@ -22,9 +22,11 @@ All notable changes to Tandem Game Companion are documented here.
   default-push buttons, using one bounded `BM_CLICK` after runtime class and button-style checks.
 - Process-scoped `set-checkbox-state` preparation for visible, enabled `BS_AUTOCHECKBOX` controls,
   with bounded state reads, no-op behavior, one-click transitions, and post-change verification.
+- Process-scoped `select-radio-button` preparation for visible, enabled `BS_AUTORADIOBUTTON` controls,
+  with bounded state reads, already-selected no-op behavior, one-click selection, and result verification.
 - Process-scoped `set-edit-text` preparation for visible, enabled standard single-line Win32 `Edit`
   controls, with exact before/after text verification and no-op behavior when already correct.
-- Wine smoke coverage for ComboBox, button, checkbox, and Edit mutations, including process/window
+- Wine smoke coverage for ComboBox, button, checkbox, auto-radio-button, and Edit mutations, including process/window
   isolation, exactly-once behavior, no-op behavior, unsupported-style rejection, ambiguity, timeouts,
   tool exit, required/optional policy, cleanup, and unchanged wait/guardian behavior.
 
@@ -32,8 +34,9 @@ All notable changes to Tandem Game Companion are documented here.
 
 - Window and control discovery are restricted to the exact PID Tandem launched. Control mutation is
   allowlisted to standard ComboBox selection by numeric index, one standard push-button `BM_CLICK`,
-  deterministic `BS_AUTOCHECKBOX` state transitions, and exact text setting on standard single-line
-  editable `Edit` controls. Runtime-class, style, visibility, enabled-state, ambiguity, timeout, and
+  deterministic `BS_AUTOCHECKBOX` state transitions, deterministic `BS_AUTORADIOBUTTON` selection,
+  and exact text setting on standard single-line editable `Edit` controls. Runtime-class, style,
+  visibility, enabled-state, ambiguity, timeout, and
   before/after verification checks are applied as applicable. Text-based discovery, focus, activation,
   synthesized input, arbitrary configurable messages, other control mutations, UI Automation, and
   image matching remain excluded.

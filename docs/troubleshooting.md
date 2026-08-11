@@ -110,6 +110,18 @@ Manual `BS_CHECKBOX`, three-state, radio, owner-drawn, custom-drawn, and framewo
 are intentionally rejected. If the requested state already matches, success is a no-op. Otherwise a
 real transition sends one bounded `BM_CLICK` and must verify the new state with `BM_GETCHECK`.
 
+## A `select-radio-button` preparation step fails
+
+Check `Tandem.log` for the parent selector, numeric control ID, runtime class, button style, prior
+selected state, resulting selected state, and failure reason. The target must be one visible, enabled
+standard `Button` owned by the directly launched tool PID and must use `BS_AUTORADIOBUTTON`.
+
+An already-selected target is successful without `BM_CLICK`. Otherwise Tandem sends one bounded
+`BM_CLICK` and requires a following `BM_GETCHECK` to report `BST_CHECKED`. Standard automatic
+radio-group behavior is responsible for clearing siblings; Tandem does not directly rewrite them.
+Manual `BS_RADIOBUTTON`, checkbox, push/default-push, owner-drawn, custom-drawn, wrong-class, hidden,
+disabled, and ambiguous targets are intentionally rejected.
+
 ## A `set-edit-text` preparation step fails
 
 Check `Tandem.log` for the parent selector, numeric control ID, runtime class, style rejection, UTF-16

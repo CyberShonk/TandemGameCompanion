@@ -1,0 +1,27 @@
+config_version = 1
+[game]
+name = "Invalid Radio Recipe Game"
+path = "SmokeGame.exe"
+working_directory = "."
+
+[[tools]]
+name = "Broken Radio Tool One"
+path = "RadioTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_equals = "Trainer"
+window_title_contains = "Trainer"
+control_class_equals = "Edit"
+timeout_ms = 0
+
+[[tools]]
+name = "Broken Radio Tool Two"
+path = "RadioTool.exe"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_contains = "Trainer"
+control_id = 2147483648
+control_class_equals = "Button"
+timeout_ms = 10000

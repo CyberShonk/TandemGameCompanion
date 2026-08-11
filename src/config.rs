@@ -120,6 +120,14 @@ pub enum PreparationStepConfig {
         #[serde(default = "default_window_wait_timeout_ms")]
         timeout_ms: u64,
     },
+    SelectRadioButton {
+        window_title_equals: Option<String>,
+        window_title_contains: Option<String>,
+        control_id: Option<u32>,
+        control_class_equals: Option<String>,
+        #[serde(default = "default_window_wait_timeout_ms")]
+        timeout_ms: u64,
+    },
     SetEditText {
         window_title_equals: Option<String>,
         window_title_contains: Option<String>,
@@ -202,6 +210,11 @@ pub enum PreparationStep {
         window_matcher: WindowTitleMatcher,
         control_selector: ControlSelector,
         checked: bool,
+        timeout_ms: u64,
+    },
+    SelectRadioButton {
+        window_matcher: WindowTitleMatcher,
+        control_selector: ControlSelector,
         timeout_ms: u64,
     },
     SetEditText {
@@ -317,6 +330,16 @@ impl PreparationStep {
                 window_matcher.description(),
                 control_selector.description(),
                 checked,
+                timeout_ms
+            ),
+            Self::SelectRadioButton {
+                window_matcher,
+                control_selector,
+                timeout_ms,
+            } => format!(
+                "select-radio-button (window {}; {}; runtime class equals \"Button\"; BS_AUTORADIOBUTTON; visible and enabled; timeout={}ms)",
+                window_matcher.description(),
+                control_selector.description(),
                 timeout_ms
             ),
             Self::SetEditText {
@@ -831,6 +854,68 @@ fn resolve_preparation_step(
                 }),
                 _ => None,
             }
+        }
+        PreparationStepConfig::SelectRadioButton {
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            timeout_ms,
+        } => {
+            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
+            let window_matcher = resolve_window_title_matcher(
+                &label,
+                "window_title_equals",
+                window_title_equals,
+                "window_title_contains",
+                window_title_contains,
+                problems,
+            );
+            if control_id.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id for deterministic radio-button selection"
+                ));
+            }
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {} for select-radio-button",
+                        i32::MAX
+                    ));
+                    false
+                }
+                Some(_) => true,
+                None => false,
+            };
+            let class_equals = control_class_equals
+                .as_ref()
+                .and_then(|value| validate_control_class(&label, value, problems));
+            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+            let supported_class = match class_equals.as_deref() {
+                Some("Button") | None => true,
+                Some(_) => {
+                    problems.push(format!(
+                        "{label} control_class_equals must be exactly \"Button\" for select-radio-button"
+                    ));
+                    false
+                }
+            };
+            if !timeout_valid
+                || !control_id_valid
+                || !control_class_valid
+                || !supported_class
+                || control_id.is_none()
+            {
+                return None;
+            }
+            window_matcher.map(|window_matcher| PreparationStep::SelectRadioButton {
+                window_matcher,
+                control_selector: ControlSelector {
+                    id: *control_id,
+                    class_equals,
+                },
+                timeout_ms: *timeout_ms,
+            })
         }
         PreparationStepConfig::SetEditText {
             window_title_equals,
@@ -1632,6 +1717,36 @@ checked = true
         );
     }
     #[test]
+    fn parses_select_radio_button_preparation() {
+        let config: Config = toml::from_str(
+            r#"config_version = 1
+[game]
+name = "Game"
+path = "Game"
+[[tools]]
+name = "Tool"
+path = "Tool"
+launch = "before-game"
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_contains = "Trainer"
+control_id = 5002
+control_class_equals = "Button"
+"#,
+        )
+        .expect("select-radio-button preparation should parse");
+        assert_eq!(
+            config.tools[0].prepare[0],
+            PreparationStepConfig::SelectRadioButton {
+                window_title_equals: None,
+                window_title_contains: Some("Trainer".into()),
+                control_id: Some(5002),
+                control_class_equals: Some("Button".into()),
+                timeout_ms: 10_000,
+            }
+        );
+    }
+    #[test]
     fn parses_set_edit_text_preparation() {
         let config: Config = toml::from_str(
             r#"config_version = 1
@@ -1763,6 +1878,21 @@ text = "60"
         assert_eq!(
             step.description(),
             "set-checkbox-state (window title contains \"Trainer\"; control ID 1003 and class equals \"Button\"; runtime class equals \"Button\"; BS_AUTOCHECKBOX; checked=true; visible and enabled; timeout=10000ms)"
+        );
+    }
+    #[test]
+    fn radio_button_selection_description_is_deterministic() {
+        let step = PreparationStep::SelectRadioButton {
+            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+            control_selector: ControlSelector {
+                id: Some(5002),
+                class_equals: Some("Button".into()),
+            },
+            timeout_ms: 10_000,
+        };
+        assert_eq!(
+            step.description(),
+            "select-radio-button (window title contains \"Trainer\"; control ID 5002 and class equals \"Button\"; runtime class equals \"Button\"; BS_AUTORADIOBUTTON; visible and enabled; timeout=10000ms)"
         );
     }
     #[test]
@@ -2164,6 +2294,46 @@ selected_index = 2
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn rejects_invalid_radio_button_recipes() {
+        let mut problems = Vec::new();
+        let invalid = PreparationStepConfig::SelectRadioButton {
+            window_title_equals: Some("Trainer".into()),
+            window_title_contains: Some("Trainer".into()),
+            control_id: None,
+            control_class_equals: Some("Edit".into()),
+            timeout_ms: 0,
+        };
+        assert!(resolve_preparation_step("Tool", 0, &invalid, &mut problems).is_none());
+        let message = problems.join("\n");
+        assert!(
+            message.contains(
+                "must define exactly one of window_title_equals or window_title_contains"
+            )
+        );
+        assert!(
+            message.contains("must define control_id for deterministic radio-button selection")
+        );
+        assert!(
+            message.contains(
+                "control_class_equals must be exactly \"Button\" for select-radio-button"
+            )
+        );
+        assert!(message.contains("timeout_ms must be between 1 and 120000"));
+
+        let mut problems = Vec::new();
+        let invalid_id = PreparationStepConfig::SelectRadioButton {
+            window_title_equals: None,
+            window_title_contains: Some("Trainer".into()),
+            control_id: Some(2_147_483_648),
+            control_class_equals: Some("Button".into()),
+            timeout_ms: 10_000,
+        };
+        assert!(resolve_preparation_step("Tool", 0, &invalid_id, &mut problems).is_none());
+        assert!(problems.iter().any(|problem| {
+            problem.contains("control_id must be between 1 and 2147483647 for select-radio-button")
+        }));
+    }
     #[test]
     fn rejects_nul_in_edit_text_configuration() {
         let mut problems = Vec::new();

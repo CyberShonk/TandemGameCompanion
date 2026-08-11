@@ -38,7 +38,7 @@ Tandem can:
 - start tools before or after the game;
 - delay tool launches when required;
 - wait for a visible top-level window or visible enabled standard Win32 control owned by a launched before-game tool;
-- perform bounded process-scoped ComboBox selection, push-button invocation, auto-checkbox state preparation, and standard single-line Edit text setting;
+- perform bounded process-scoped ComboBox selection, push-button invocation, auto-checkbox state preparation, auto-radio-button selection, and standard single-line Edit text setting;
 - pause for a native confirmation before starting the game;
 - wait for a one-shot setup utility to finish;
 - allow optional tool failures without blocking the game;
@@ -61,6 +61,7 @@ channel.
 | Select a standard Win32 ComboBox item by index | `[[tools.prepare]]` with `action = "select-combo-box-index"` |
 | Invoke a standard Win32 push button | `[[tools.prepare]]` with `action = "invoke-button"` |
 | Set a standard Win32 auto-checkbox state | `[[tools.prepare]]` with `action = "set-checkbox-state"` |
+| Select a standard Win32 auto-radio button | `[[tools.prepare]]` with `action = "select-radio-button"` |
 | Set text in a standard single-line Win32 Edit control | `[[tools.prepare]]` with `action = "set-edit-text"` |
 | Open a trainer, configure it, then continue | `before_game_wait = "user-confirmation"` |
 | Run a setup utility and wait for success | `before_game_wait = "tool-exit"` |
@@ -213,6 +214,27 @@ the directly launched tool PID are supported. Manual checkboxes, three-state con
 buttons, owner-drawn controls, custom UI frameworks, focus changes, and synthesized input are
 rejected or outside scope.
 
+### Select a standard Win32 auto-radio button
+
+Use this when a directly launched before-game tool exposes a standard `BS_AUTORADIOBUTTON` with a
+stable numeric control ID and Tandem must guarantee that option is selected:
+
+```toml
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 5002
+timeout_ms = 10000
+```
+
+Tandem reads the target state with bounded `BM_GETCHECK`. If the radio button is already selected,
+the step is a no-op and sends no click. Otherwise Tandem sends one bounded `BM_CLICK`, then reads the
+target again and requires `BST_CHECKED`. Only visible, enabled `BS_AUTORADIOBUTTON` controls owned by
+the directly launched tool PID are supported. Standard Win32 automatic radio-group behavior is left
+to the control; Tandem does not directly rewrite sibling states. Manual `BS_RADIOBUTTON`, checkbox,
+push-button, owner-drawn, custom, hidden, disabled, and ambiguous targets are rejected.
+
 ### Set text in a standard single-line Win32 Edit control
 
 Use this when a directly launched before-game tool exposes a standard editable `Edit` control with a
@@ -363,6 +385,7 @@ through Tandem.
 
 Tandem's mutating preparation actions are intentionally narrow: `select-combo-box-index` for
 standard `ComboBox` controls, `invoke-button` for `BS_PUSHBUTTON`/`BS_DEFPUSHBUTTON`,
-`set-checkbox-state` for `BS_AUTOCHECKBOX`, and `set-edit-text` for standard single-line editable
-`Edit` controls. All remain restricted to the directly launched tool PID, unambiguous visible/enabled
+`set-checkbox-state` for `BS_AUTOCHECKBOX`, `select-radio-button` for `BS_AUTORADIOBUTTON`, and
+`set-edit-text` for standard single-line editable `Edit` controls. All remain restricted to the
+directly launched tool PID, unambiguous visible/enabled
 controls, bounded messages, and operation-specific verification.
