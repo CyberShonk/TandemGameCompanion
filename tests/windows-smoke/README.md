@@ -23,6 +23,8 @@ The test covers:
 - Checkbox, radio, owner-drawn, wrong-class, ambiguous, timeout, direct-exit, required, and optional button failures.
 - Deterministic `BS_AUTOCHECKBOX` checked/unchecked transitions with bounded `BM_GETCHECK`/`BM_CLICK` verification and already-correct no-op behavior.
 - Checkbox PID, parent-window, visibility, enabled-state, control-ID, class, style, ambiguity, timeout, direct-exit, required, and optional failure coverage.
+- Deterministic `BS_AUTORADIOBUTTON` selection with bounded `BM_GETCHECK`/`BM_CLICK`, exactly-one-click transition, already-selected no-op behavior, and standard sibling auto-clearing.
+- Radio PID, parent-window, visibility, enabled-state, control-ID, class, style, ambiguity, timeout, direct-exit, required, and optional failure coverage.
 - Standard single-line Edit text changes, exact read-back, already-correct no-op behavior, Unicode text, empty-string clearing, and normal `EN_UPDATE`/`EN_CHANGE` notifications.
 - Edit PID, parent-window, visibility, enabled-state, control-ID, runtime-class, style, ambiguity, redaction, timeout, direct-exit, required, and optional failure coverage.
 - Invalid recipe, ambiguous parent/control, out-of-range, direct exit, required, and optional failures.
@@ -37,6 +39,7 @@ Run the complete test from the repository root:
 ```bash
 ./scripts/test-windows.sh
 ./scripts/test-edit-text-windows.sh
+./scripts/test-radio-selection-windows.sh
 ```
 
 Generated executables, logs, event files, and Wine artifacts remain under `target/`

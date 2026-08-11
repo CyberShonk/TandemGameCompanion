@@ -199,6 +199,27 @@ timeout boundaries used by other preparation actions still apply. Manual and thr
 radio buttons, owner-drawn controls, focus/activation, synthesized input, and custom controls are not
 supported by this action.
 
+### Select a standard Win32 auto-radio button
+
+```toml
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_contains = "Trainer"
+control_class_equals = "Button"
+control_id = 5002
+timeout_ms = 10000
+```
+
+Use this when one standard `BS_AUTORADIOBUTTON` option must be selected before the game starts. Tandem
+reads the target state first. If it is already selected, the step completes without a click. Otherwise
+it sends one bounded `BM_CLICK` and requires the target to report `BST_CHECKED` afterward.
+
+Normal Win32 automatic radio-group behavior clears sibling options; Tandem does not enumerate or
+directly alter those siblings. The direct-PID, parent-window, control-ID, runtime-class, visibility,
+enabled-state, ambiguity, and timeout boundaries still apply. Manual `BS_RADIOBUTTON`, checkboxes,
+push buttons, owner-drawn controls, custom controls, focus/activation, and synthesized input are not
+supported by this action.
+
 ### Set text in a standard single-line Win32 Edit control
 
 ```toml

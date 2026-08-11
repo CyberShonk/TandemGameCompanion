@@ -23,7 +23,7 @@ Unit tests cover:
 
 - CLI parsing;
 - TOML defaults;
-- wait-mode and preparation-recipe validation, including ComboBox index, Edit text limits/redaction, timeout, process, and wrapper boundaries;
+- wait-mode and preparation-recipe validation, including ComboBox index, auto-radio selection, Edit text limits/redaction, timeout, process, and wrapper boundaries;
 - title-matcher and control-selector behavior, including ID/class AND semantics;
 - path and file-type validation;
 - log escape and overlap protection;
@@ -67,6 +67,7 @@ The documentation does not hardcode a total test count because it changes as cov
 ```bash
 ./scripts/test-windows.sh
 ./scripts/test-edit-text-windows.sh
+./scripts/test-radio-selection-windows.sh
 ```
 
 The main smoke harness:
@@ -95,6 +96,12 @@ The dedicated Edit-control smoke harness then verifies standard single-line text
 correct no-op behavior, empty-string clearing, Unicode text, `EN_UPDATE`/`EN_CHANGE`, runtime log
 redaction, PID/parent/control isolation, unsupported Edit styles, wrong runtime class, ambiguity,
 required and optional failures, timeout behavior, and direct tool-exit detection.
+
+The dedicated radio-selection smoke harness verifies unchecked-to-selected transition, exactly one
+click, already-selected no-op behavior, standard automatic sibling clearing, PID/parent/control
+isolation, hidden/disabled filtering, rejection of manual radio, checkbox, push-button, owner-drawn,
+wrong-class, and ambiguous targets, invalid recipes, optional failure continuation, and direct tool
+exit detection.
 
 See [Windows Testing](WINDOWS_TESTING.md) for prerequisites.
 

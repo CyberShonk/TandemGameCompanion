@@ -1,0 +1,26 @@
+config_version = 1
+
+[launcher]
+log_file = "RadioSelectionWrongRuntimeClass.log"
+continue_on_optional_tool_failure = true
+
+[game]
+name = "Radio Failure Game"
+path = "SmokeGame.exe"
+arguments = ["radio-wrongruntimeclass-events.txt", "radio-wrong-runtime-game-start", "0", "radio-wrong-runtime-game-end"]
+working_directory = "."
+
+[[tools]]
+name = "Wrong Runtime Radio Tool"
+path = "RadioTool.exe"
+arguments = ["radio-wrongruntimeclass-events.txt", "wrong-runtime-class", "Wrong Runtime Radio Trainer", "5001", "0", "0", "5000"]
+working_directory = "."
+launch = "before-game"
+required = true
+close_when_game_exits = true
+
+[[tools.prepare]]
+action = "select-radio-button"
+window_title_equals = "Wrong Runtime Radio Trainer"
+control_id = 5001
+timeout_ms = 2000

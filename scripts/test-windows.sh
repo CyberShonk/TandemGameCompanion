@@ -508,8 +508,13 @@ if grep -Fxq "control-exit-game-start" control-exit-events.txt 2>/dev/null; then
   exit 1
 fi
 
-if ! grep -Fq "exited before a matching visible enabled control appeared with exit code 0" control-exit-output.txt; then
-  echo "Control exit test did not report tool-exit detection." >&2
+if ! grep -Fq "companion tool Control Exit Tool exited before a matching visible enabled control appeared" control-exit-output.txt; then
+  echo "Control exit test did not report direct-tool exit detection." >&2
+  cat control-exit-output.txt >&2
+  exit 1
+fi
+if ! grep -Fq "with exit code 0" control-exit-output.txt; then
+  echo "Control exit test did not report the direct tool exit code." >&2
   cat control-exit-output.txt >&2
   exit 1
 fi
