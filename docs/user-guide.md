@@ -1,29 +1,23 @@
 # Tandem Game Companion User Guide
 
-[Documentation index](index.md) · [Configuration](CONFIGURATION.md) · [Troubleshooting](troubleshooting.md) · [Project README](../README.md)
+[Documentation](index.md) · [Configuration](CONFIGURATION.md) · [Troubleshooting](troubleshooting.md)
 
----
-
-This guide covers the normal path from extracting Tandem to launching a game with one or more
-companion tools.
+Tandem starts a game and its configured companion tools as one session. This guide covers the normal setup path.
 
 > [!WARNING]
-> Tandem is alpha software. Keep backups of important configuration files and test new setups with
-> tools and games you trust.
+> Tandem is alpha software. Test new configurations with games and tools you trust.
 
-## Basic use path
+## Basic setup
 
 1. Extract Tandem into the game folder.
 2. Put companion programs in a `Tools` folder.
 3. Edit `Tandem.toml`.
 4. Validate the configuration when possible.
-5. Point the Windows or compatibility environment at `TandemGameCompanion.exe`.
+5. Set the Windows or compatibility environment to launch `TandemGameCompanion.exe`.
 6. Launch normally.
 7. Check `Tandem.log` if anything fails.
 
-## 1. Prepare the folder
-
-A simple portable layout is easiest to review and move:
+A simple layout is:
 
 ```text
 GameFolder/
@@ -32,16 +26,12 @@ GameFolder/
 ├── ExampleGame.exe
 └── Tools/
     ├── Trainer.exe
-    ├── Setup.exe
     └── ControllerUtility.exe
 ```
 
-Do not rename or replace the original game executable. Tandem should launch the real game file
-listed in the configuration.
+Start with [`Tandem.example.toml`](../Tandem.example.toml).
 
-## 2. Configure the game
-
-Start with [`Tandem.example.toml`](../Tandem.example.toml). The minimum game section looks like:
+## Configure the game
 
 ```toml
 config_version = 1
@@ -58,20 +48,13 @@ arguments = []
 working_directory = "."
 ```
 
-Use forward slashes in portable paths, including on Windows:
+Relative paths are the simplest portable choice. Forward slashes work in Windows paths used by Tandem.
 
-```toml
-path = "Tools/Trainer.exe"
-```
+Keep `allow_external_paths = false` unless a game or tool must be outside the folder containing `Tandem.toml`.
 
-Keep `allow_external_paths = false` unless the game or tool genuinely must live outside the
-folder containing `Tandem.toml`.
+## Add a companion tool
 
-## 3. Add tools
-
-Each tool uses its own `[[tools]]` section.
-
-### Normal companion after game startup
+Each tool uses a `[[tools]]` section.
 
 ```toml
 [[tools]]
@@ -85,37 +68,46 @@ required = false
 close_when_game_exits = true
 ```
 
-This starts the tool two seconds after the game process starts.
+This starts the tool two seconds after the game starts.
 
-### Wait for a trainer window before continuing
+### Start a tool before the game
 
 ```toml
 [[tools]]
 name = "Trainer"
 path = "Tools/Trainer.exe"
-arguments = []
-working_directory = "Tools"
 launch = "before-game"
+before_game_wait = "user-confirmation"
 required = true
 close_when_game_exits = true
+```
 
+`before_game_wait` supports:
+
+- `none`: continue after the tool and its preparation steps are started.
+- `user-confirmation`: show an OK/Cancel dialog before game launch.
+- `tool-exit`: wait for the tool to finish before game launch.
+
+A required `tool-exit` utility must return exit code `0`.
+
+## Tool preparation recipes
+
+Preparation steps run in order after a directly launched before game EXE or COM tool starts.
+
+The parent window and target control must belong to the exact process Tandem launched. Tandem rejects ambiguous, hidden, disabled, unsupported, or timed out targets.
+
+### Wait for a window
+
+```toml
 [[tools.prepare]]
 action = "wait-for-window"
 title_contains = "Trainer"
 timeout_ms = 10000
 ```
 
-Tandem waits until the directly launched trainer process owns a visible top-level window with a
-matching title. A matching title from another process is ignored. This action only detects the
-window; it does not focus, move, click, or send input to it.
+This waits for a visible top level window. Use `title_equals` instead when the full title is stable.
 
-Preparation recipes currently require a directly launched EXE or COM tool. BAT/CMD wrappers and
-launchers that exit after creating a separate GUI process are outside the direct-PID boundary.
-
-### Wait for a standard Win32 control
-
-Add a second sequential preparation step when the parent window is not enough and the game must wait
-for one specific standard control to become visible and enabled:
+### Wait for a control
 
 ```toml
 [[tools.prepare]]
@@ -126,20 +118,9 @@ control_id = 1001
 timeout_ms = 10000
 ```
 
-Define exactly one parent selector: `window_title_equals` or `window_title_contains`. Define
-`control_id`, `control_class_equals`, or both. When both control selectors are present, Tandem uses
-AND semantics.
+Use `control_id`, `control_class_equals`, or both. When both are present, both must match.
 
-The parent top-level window and descendant control must be owned by the exact PID Tandem launched.
-Matching controls in another process, in a different top-level window, while hidden, or while
-disabled are ignored. Tandem does not read control text, choose an option, invoke a button, change a
-checkbox or radio button, focus or activate a window, send keyboard or mouse input, use UI
-Automation, inspect images, or otherwise mutate the tool.
-
-This action is limited to standard HWND-based Win32 controls with stable IDs or class names.
-Custom-drawn interfaces may not expose a compatible control.
-
-### Select a standard Win32 ComboBox index
+### Select a ComboBox item
 
 ```toml
 [[tools.prepare]]
@@ -151,17 +132,9 @@ selected_index = 2
 timeout_ms = 10000
 ```
 
-`selected_index` is zero-based. Tandem waits for the exact launched process, one matching visible
-parent, one matching visible and enabled descendant, and enough standard ComboBox items. It reads
-the prior index, changes only when necessary, verifies the result, sends one standard parent
-selection-change notification for a real change, and verifies again. An already-selected index is a
-no-op with no notification.
+`selected_index` is zero based. Tandem verifies that the requested item exists and that the resulting selection matches. An already selected index succeeds without another change.
 
-Text matching, `CB_SELECTSTRING`, arbitrary messages, list opening, focus, activation, keyboard or
-mouse input, button or checkbox/radio mutation, UI Automation, image matching, custom controls, and
-descendant-process following remain unsupported.
-
-### Invoke a standard Win32 push button
+### Invoke a push button
 
 ```toml
 [[tools.prepare]]
@@ -172,12 +145,9 @@ control_id = 1002
 timeout_ms = 10000
 ```
 
-This action requires a numeric control ID and only supports `BS_PUSHBUTTON` and
-`BS_DEFPUSHBUTTON`. Tandem verifies the runtime class and style, requires a unique visible/enabled
-control inside the directly launched tool process, and sends one bounded `BM_CLICK`. It does not
-activate or focus the window or synthesize input.
+Only standard `BS_PUSHBUTTON` and `BS_DEFPUSHBUTTON` controls are supported.
 
-### Set a standard Win32 auto-checkbox state
+### Set a checkbox state
 
 ```toml
 [[tools.prepare]]
@@ -189,17 +159,9 @@ checked = true
 timeout_ms = 10000
 ```
 
-Use `checked = true` to require the checkbox on or `checked = false` to require it off. Tandem only
-supports standard `BS_AUTOCHECKBOX` controls. It reads the current state first, completes without a
-click when the state is already correct, or sends one bounded `BM_CLICK` and verifies the resulting
-state when a transition is required.
+Only standard `BS_AUTOCHECKBOX` controls are supported. If the requested state is already set, the step succeeds without another click.
 
-The direct-PID, parent-window, control-ID, runtime-class, visibility, enabled-state, ambiguity, and
-timeout boundaries used by other preparation actions still apply. Manual and three-state checkboxes,
-radio buttons, owner-drawn controls, focus/activation, synthesized input, and custom controls are not
-supported by this action.
-
-### Select a standard Win32 auto-radio button
+### Select a radio button
 
 ```toml
 [[tools.prepare]]
@@ -210,17 +172,9 @@ control_id = 5002
 timeout_ms = 10000
 ```
 
-Use this when one standard `BS_AUTORADIOBUTTON` option must be selected before the game starts. Tandem
-reads the target state first. If it is already selected, the step completes without a click. Otherwise
-it sends one bounded `BM_CLICK` and requires the target to report `BST_CHECKED` afterward.
+Only standard `BS_AUTORADIOBUTTON` controls are supported. An already selected target succeeds without another click. Normal Win32 radio group behavior handles sibling options.
 
-Normal Win32 automatic radio-group behavior clears sibling options; Tandem does not enumerate or
-directly alter those siblings. The direct-PID, parent-window, control-ID, runtime-class, visibility,
-enabled-state, ambiguity, and timeout boundaries still apply. Manual `BS_RADIOBUTTON`, checkboxes,
-push buttons, owner-drawn controls, custom controls, focus/activation, and synthesized input are not
-supported by this action.
-
-### Set text in a standard single-line Win32 Edit control
+### Set Edit text
 
 ```toml
 [[tools.prepare]]
@@ -232,95 +186,33 @@ text = "60"
 timeout_ms = 10000
 ```
 
-Use this for stable standard Win32 fields such as a numeric trainer setting. Tandem requires a
-numeric control ID, verifies the runtime class is exactly `Edit`, reads the current value, and skips
-`WM_SETTEXT` when the requested text is already present. Otherwise it sends one bounded
-`WM_SETTEXT` and requires an exact read-back result.
+This action supports visible, enabled, standard single line editable `Edit` controls. Empty text is allowed. Text is limited to 4,096 UTF-16 units and cannot contain NUL, carriage return, or line feed. Tandem does not include the configured or existing field content in preparation result logs.
 
-The first version supports visible, enabled, single-line editable controls only. Multiline,
-password, read-only, uppercase/lowercase-transforming, OEM-transforming, custom, hidden, disabled,
-and ambiguous targets are rejected. Empty text is valid. Configured text is limited to 4,096 UTF-16
-units and may not contain NUL, carriage return, or line feed. Tandem reports text lengths rather than
-the configured or existing text content in preparation descriptions and result logs. It does not
-focus the field, activate the window, type keys, use the clipboard, or send Enter or Tab afterward.
-
-### Trainer configuration before game startup
+## Required and optional tools
 
 ```toml
-[[tools]]
-name = "Trainer"
-path = "Tools/Trainer.exe"
-arguments = []
-working_directory = "Tools"
-launch = "before-game"
-before_game_wait = "user-confirmation"
-delay_ms = 0
 required = true
-close_when_game_exits = true
 ```
 
-Tandem opens the trainer and shows a native Windows confirmation dialog. The game remains stopped
-until the user selects **OK**.
-
-Selecting **Cancel** fails the session and closes tools already started by Tandem. A trainer that
-remains open after confirmation follows `close_when_game_exits` when the game ends.
-
-The workflow is intentionally completed before the game starts. Fullscreen, native-rendering, or
-direct-scanout modes may cover secondary Windows windows after launch.
-
-### One-shot setup utility
-
-```toml
-[[tools]]
-name = "Setup Utility"
-path = "Tools/Setup.exe"
-arguments = []
-working_directory = "Tools"
-launch = "before-game"
-before_game_wait = "tool-exit"
-delay_ms = 0
-required = true
-close_when_game_exits = false
-```
-
-Tandem waits for the utility to exit. Exit code `0` continues to the game. A required nonzero exit
-stops the session and is returned by Tandem.
-
-## 4. Choose failure behavior
+Use this when the game should not start if the tool fails.
 
 ```toml
 required = false
 ```
 
-An optional tool may fail without blocking the game when
-`continue_on_optional_tool_failure = true`.
+An optional tool may fail without blocking the game when `continue_on_optional_tool_failure = true`.
 
-```toml
-required = true
-```
-
-A required tool must start successfully. For `tool-exit` waiting, it must also exit successfully.
-Use this when the game should not start without the tool.
-
-## 5. Choose cleanup behavior
+## Close tools with the game
 
 ```toml
 close_when_game_exits = true
 ```
 
-Tandem attempts to terminate the direct child process it started when the game exits normally.
+Tandem attempts to terminate the direct tool process it started after the game exits.
 
-```toml
-close_when_game_exits = false
-```
+Tandem does not currently guarantee cleanup of additional processes created by a tool or launcher.
 
-The tool may remain running after a successful game session. Tools started during a session failure
-are still cleaned up where Tandem retains control.
-
-Tandem currently manages the directly launched process, not every descendant that a launcher,
-script, or tool may create.
-
-## 6. Validate before launching
+## Validate before launching
 
 From Windows or a Wine command prompt:
 
@@ -328,52 +220,30 @@ From Windows or a Wine command prompt:
 TandemGameCompanion.exe --validate
 ```
 
-Preview the resolved launch plan without starting programs:
+Preview the resolved launch plan without starting anything:
 
 ```text
 TandemGameCompanion.exe --dry-run
 ```
 
-Validation catches common path, file-type, configuration-version, and script-safety problems.
+## GameNative and Winlator
 
-## 7. Configure GameNative or Winlator
+Set the container main executable to `TandemGameCompanion.exe` and use the folder containing `TandemGameCompanion.exe` and `Tandem.toml` as the working directory.
 
-Set the container's main executable to:
+Compatibility differs between devices, container versions, games, and tools. A launcher that exits after starting a different game or tool process may fall outside Tandem's current direct process boundary.
 
-```text
-TandemGameCompanion.exe
-```
+## Read the log
 
-Use the folder containing `TandemGameCompanion.exe` and `Tandem.toml` as the working directory.
-Do not point the container directly at the game executable when testing Tandem.
+Tandem writes `Tandem.log` beside the configuration by default. It records launch attempts, process IDs, preparation steps, delays, waits, exit results, cleanup results, and the final session result.
 
-The native confirmation dialog should be usable before the game starts. Touch behavior is normally
-provided by the compatibility environment. Controller use depends on its controller-to-pointer or
-keyboard mapping.
-
-## 8. Read the log
-
-Tandem writes `Tandem.log` beside the configuration by default. The log records:
-
-- the resolved configuration path;
-- tool and game launch attempts;
-- process IDs;
-- preparation steps, delays, and wait states;
-- exit statuses;
-- cleanup results; and
-- the final session result.
-
-When reporting a problem, remove personal paths if needed but keep the surrounding launch and exit
-messages intact.
+When reporting a problem, remove credentials and personal information that are not needed to reproduce it.
 
 ## Current limitations
 
 - Configuration is edited manually.
-- A visible console window remains during normal launch.
-- There is no graphical setup editor or general controller-driven setup interface.
-- Cleanup is direct-child based rather than process-tree based.
-- Worker recovery does not restart the worker or reconstruct tool cleanup.
-- Real-device GameNative and Winlator coverage remains limited.
+- A console window remains visible during normal launch.
+- There is no graphical setup editor or general controller driven setup interface.
+- Cleanup follows the direct process Tandem started rather than a complete descendant process tree.
+- Real device GameNative and Winlator testing remains limited.
 
-See [Troubleshooting](troubleshooting.md) for common failures and the
-[Configuration Reference](CONFIGURATION.md) for every supported field.
+See [Troubleshooting](troubleshooting.md) for common failures and the [Configuration Reference](CONFIGURATION.md) for exact field rules.

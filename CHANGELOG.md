@@ -1,70 +1,52 @@
 # Changelog
 
-All notable changes to Tandem Game Companion are documented here.
+Notable user visible changes to Tandem Game Companion are recorded here.
 
 ## Unreleased
 
 ### Added
 
-- Generic per-tool preparation recipes with a bounded `wait-for-window` action.
-- Process-scoped visible top-level window discovery using exact-title or title-contains matching.
-- Windows smoke coverage proving that a same-title window from another process cannot satisfy a
-  tool's preparation step.
-- Process-scoped `wait-for-control` preparation for visible, enabled standard Win32 descendant
-  controls selected by parent-window title, numeric control ID, exact class name, or ID/class AND
-  semantics.
-- Windows smoke coverage for other-process, other-top-level-window, hidden, disabled, and partial
-  ID/class control false matches.
-- Process-scoped `select-combo-box-index` preparation for a standard visible, enabled Win32
-  `ComboBox`, using zero-based numeric indices, bounded documented messages, result verification,
-  and the minimum standard parent selection-change notification.
-- Process-scoped `invoke-button` preparation for visible, enabled standard Win32 push and
-  default-push buttons, using one bounded `BM_CLICK` after runtime class and button-style checks.
-- Process-scoped `set-checkbox-state` preparation for visible, enabled `BS_AUTOCHECKBOX` controls,
-  with bounded state reads, no-op behavior, one-click transitions, and post-change verification.
-- Process-scoped `select-radio-button` preparation for visible, enabled `BS_AUTORADIOBUTTON` controls,
-  with bounded state reads, already-selected no-op behavior, one-click selection, and result verification.
-- Process-scoped `set-edit-text` preparation for visible, enabled standard single-line Win32 `Edit`
-  controls, with exact before/after text verification and no-op behavior when already correct.
-- Wine smoke coverage for ComboBox, button, checkbox, auto-radio-button, and Edit mutations, including process/window
-  isolation, exactly-once behavior, no-op behavior, unsupported-style rejection, ambiguity, timeouts,
-  tool exit, required/optional policy, cleanup, and unchanged wait/guardian behavior.
+- Ordered per tool preparation recipes.
+- `wait-for-window` and `wait-for-control` readiness checks scoped to the directly launched tool process.
+- Standard Win32 ComboBox selection by zero based index.
+- Standard push button invocation.
+- Standard automatic checkbox state setting.
+- Standard automatic radio button selection.
+- Standard single line Edit text setting with content redaction from preparation and result logs.
+- Wine smoke coverage for supported preparation actions, isolation, no op behavior, invalid targets, timeouts, tool exit, and required or optional failure handling.
+
+### Changed
+
+- Public documentation is consolidated around setup, configuration, troubleshooting, security, contribution, and release history.
+- Tool preparation documentation now describes supported user behavior and limits without duplicating internal implementation details.
 
 ### Security
 
-- Window and control discovery are restricted to the exact PID Tandem launched. Control mutation is
-  allowlisted to standard ComboBox selection by numeric index, one standard push-button `BM_CLICK`,
-  deterministic `BS_AUTOCHECKBOX` state transitions, deterministic `BS_AUTORADIOBUTTON` selection,
-  and exact text setting on standard single-line editable `Edit` controls. Runtime-class, style,
-  visibility, enabled-state, ambiguity, timeout, and
-  before/after verification checks are applied as applicable. Text-based discovery, focus, activation,
-  synthesized input, arbitrary configurable messages, other control mutations, UI Automation, and
-  image matching remain excluded.
+- Window and control preparation is restricted to the directly launched tool process.
+- Mutating preparation actions require supported standard Win32 control types, unambiguous targets, bounded operations, and action specific verification.
+- Arbitrary configurable Windows messages, synthetic keyboard or mouse input, UI Automation, image matching, and unrestricted shell commands are not exposed.
 
 ## [0.2.0-alpha] - 2026-06-24
 
 ### Added
 
-- General-purpose `before_game_wait` modes for native user confirmation and one-shot setup utilities.
-- A native Windows OK/Cancel prompt for trainers that must be configured before game launch.
-- Lifecycle integration tests for early failures, persistent tools, delayed launches, guardian recovery, and guardian-protocol spoof attempts.
-- A user guide, troubleshooting guide, and central documentation index.
+- General `before_game_wait` modes for native user confirmation and one shot setup utilities.
+- A native Windows OK/Cancel prompt for tools that must be configured before game launch.
+- Lifecycle tests for early failures, persistent tools, delayed launches, worker failure, and status channel isolation.
+- User guide, troubleshooting guide, and documentation index.
 
 ### Changed
 
 - Existing configurations remain compatible because omitted `before_game_wait` values default to `none`.
-- BAT/CMD game and tool entries preserve validated arguments through Tandem's fixed `cmd.exe` invocation.
-- Public documentation now uses a clearer project overview, navigation links, grouped references, and consistent user/developer sections.
+- BAT and CMD game and tool entries preserve validated arguments through Tandem's fixed `cmd.exe` invocation.
 
 ### Fixed
 
-- Prevented games and tools from inheriting or writing to the guardian status channel.
-- Ensured started tools are cleaned up on game-launch and other worker failure paths.
-- Preserved game, required-tool, and worker exit codes.
-- Made after-game delays stop when the game exits.
-- Validated program/working-directory types and protected log paths from symlink or junction escapes and destructive file overlap.
-- Passed validated arguments to BAT/CMD game and tool entries.
-- Made generated SHA-256 records portable by recording only the executable filename.
+- Prevented launched games and tools from inheriting or writing to the guardian status channel.
+- Cleaned up started tools when game launch or another controlled session step fails.
+- Preserved meaningful game, required tool, and worker exit codes.
+- Stopped delayed after game tools when the game exits first.
+- Strengthened path and log destination validation.
 
 ## [0.1.0-alpha] - 2026-06-20
 
@@ -72,17 +54,16 @@ All notable changes to Tandem Game Companion are documented here.
 
 - Functional Rust launcher with versioned TOML configuration.
 - EXE, COM, BAT, and CMD launch support on Windows.
-- Before-game and after-game companion-tool sequencing.
-- Optional delays, required-tool behavior, and direct child-process cleanup.
-- Guardian/worker process separation and game-process supervision.
-- Configuration validation and dry-run command-line modes.
+- Before game and after game companion tool sequencing.
+- Optional delays, required tool behavior, and direct child process cleanup.
+- Guardian and worker process separation with game process supervision.
+- Configuration validation and dry run modes.
 - Session logging.
-- Linux quality checks and Windows MSVC build/test coverage in CI.
-- Windows build scripts and an isolated Wine smoke test.
+- Linux quality checks, Windows MSVC build coverage, and an isolated Wine smoke test.
 - Alpha packaging script and tester instructions.
 
 ### Known limitations
 
-- No graphical configuration interface, controller navigation, or notifications.
-- No worker restart or cleanup recovery after worker failure.
-- Limited real-device validation in GameNative and Winlator.
+- No graphical configuration interface or general controller driven setup.
+- No worker restart or cleanup reconstruction after worker failure.
+- Limited real device validation in GameNative and Winlator.

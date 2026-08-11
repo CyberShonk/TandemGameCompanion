@@ -1,9 +1,6 @@
 # Future Rust build output
 /target/
 
-# Local project context. Never commit this directory.
-/.private/
-
 # Tandem runtime output
 /Tandem.log
 /Tandem.runtime.toml

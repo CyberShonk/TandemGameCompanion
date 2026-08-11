@@ -1,140 +1,66 @@
 # Tandem Game Companion Troubleshooting
 
-[Documentation index](index.md) · [User Guide](user-guide.md) · [Configuration](CONFIGURATION.md) · [Testing](TESTING.md)
+[Documentation](index.md) · [User Guide](user-guide.md) · [Configuration](CONFIGURATION.md)
 
----
-
-Start with `Tandem.log`. It usually shows the last successful step before the failure.
+Start with `Tandem.log`. The last successful step usually identifies where the session stopped.
 
 ## Tandem cannot find `Tandem.toml`
 
-Possible causes:
+Check that `Tandem.toml` is beside `TandemGameCompanion.exe` and that the environment working directory points to that folder.
 
-- Tandem was started from the wrong working directory.
-- The file was renamed or placed in another folder.
-- The container points at the executable but uses a different working directory.
+Use `--config PATH` only when you deliberately keep the configuration somewhere else.
 
-Try:
+## A path is rejected
 
-1. Place `Tandem.toml` beside `TandemGameCompanion.exe`.
-2. Set the container working directory to that folder.
-3. Run `TandemGameCompanion.exe --config PATH` only when deliberately using another location.
-
-## A path is rejected during validation
-
-Possible causes:
+Common causes are:
 
 - the file does not exist;
 - a program path points to a directory;
 - a working directory points to a file;
-- the path contains `..` traversal;
-- an absolute path is used while external paths are disabled;
-- a symlink or Windows junction resolves outside the portable folder; or
-- the log path overlaps the configuration, game, or a tool.
+- the path contains parent traversal;
+- an external path is used while `allow_external_paths = false`;
+- a link or junction resolves outside the portable folder; or
+- the log path overlaps another configured file.
 
-Try:
-
-1. Confirm the exact filename and extension.
-2. Use a relative path with forward slashes.
-3. Keep the game and tools under the configuration folder.
-4. Leave `allow_external_paths = false` unless an external location is necessary.
-5. Run `--validate` again.
+Use relative paths when possible and run `TandemGameCompanion.exe --validate` again.
 
 ## The game does not start
 
-Check the final lines of `Tandem.log` for:
+Check the final lines of `Tandem.log` for a required tool failure, a failed preparation step, a required setup utility returning nonzero, confirmation cancellation, an invalid game path, or a process creation error.
 
-- a required tool launch or preparation failure;
-- a required `tool-exit` utility returning nonzero;
-- cancellation of the confirmation dialog;
-- an invalid game path or working directory; or
-- a process-creation error from Windows or Wine.
+Use `--dry-run` to confirm the resolved paths and arguments without launching anything.
 
-Use `--dry-run` to confirm the resolved game path and arguments without launching anything.
+## A preparation step times out
 
-## A `wait-for-window` preparation step times out
+Check the configured window title, control ID, class name, timeout, and tool process in `Tandem.log`.
 
-Check `Tandem.log` for the configured selector, timeout, and launched PID.
+Preparation only matches the directly launched tool process. A launcher that exits after creating a different GUI process is outside the current boundary.
 
-Possible causes:
+Custom drawn interfaces may not expose the standard Win32 windows or controls required by a preparation action.
 
-- the window title does not match exactly, including capitalization;
-- the tool opens no visible top-level window;
-- the configured timeout is too short;
-- a launcher creates the actual GUI in a different process; or
-- the tool is a BAT/CMD wrapper rather than a directly launched EXE or COM file.
+### `wait-for-window`
 
-Use `title_contains` for a stable title fragment when the full title includes a version or status.
-Do not rely on another process with the same title; Tandem deliberately ignores it.
+The window title match is case sensitive. Use `title_contains` when a stable title fragment is more reliable than the complete title.
 
-## A `wait-for-control` preparation step times out
+### `wait-for-control`
 
-Check the parent-window selector, control ID, exact class capitalization, timeout, and launched PID in
-`Tandem.log`.
+The control must be visible, enabled, under the selected top level window, and owned by the directly launched tool process. When both an ID and class are configured, both must match.
 
-Tandem accepts only a visible, enabled descendant HWND under a matching visible top-level window
-owned by the exact launched-tool PID. A matching control is deliberately ignored when it belongs to
-another process, sits under a different top-level window, is hidden, is disabled, or satisfies only
-one half of a combined ID/class selector.
+## A mutating preparation action fails
 
-Standard controls expose class names such as `ComboBox` or `Button`. Custom-drawn interfaces may not
-expose a normal descendant control and cannot be detected by this action. Tandem does not inspect
-control text, use UI Automation, or match images.
+| Action | Required target |
+|---|---|
+| `select-combo-box-index` | Standard `ComboBox` with a valid requested zero based index |
+| `invoke-button` | Standard `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON` |
+| `set-checkbox-state` | Standard `BS_AUTOCHECKBOX` |
+| `select-radio-button` | Standard `BS_AUTORADIOBUTTON` |
+| `set-edit-text` | Standard visible enabled single line editable `Edit` |
 
-## A `select-combo-box-index` preparation step fails
+All mutating actions require one unambiguous parent window and one unambiguous visible enabled control owned by the directly launched tool process.
 
-Check the deterministic selector, requested index, prior/resulting index, and failure reason in
-`Tandem.log`. The parent must be unambiguous, the descendant must be visible and enabled, the actual
-runtime class must be exactly `ComboBox`, the numeric ID must fit the standard `WM_COMMAND` control
-ID field, and the item count must include the zero-based requested index.
+If the target is hidden, disabled, the wrong runtime class, the wrong control style, ambiguous, or in another process, Tandem rejects it.
 
-An unavailable index is polled only until the configured bounded timeout. Tandem does not match item
-text, open the list, focus the control, send input, or support custom-drawn ComboBoxes. A tool that
-exits and leaves its GUI in another process is outside the direct-PID boundary. An already-selected
-index is successful without mutation or parent notification.
-
-## An `invoke-button` preparation step fails
-
-Check `Tandem.log` for the parent selector, control ID, runtime class, button style, and failure
-reason. The target must be one visible, enabled standard `Button` owned by the directly launched tool
-PID and must use `BS_PUSHBUTTON` or `BS_DEFPUSHBUTTON`. Checkbox, radio, owner-drawn, custom-drawn,
-and ambiguous controls are rejected.
-
-## A `set-checkbox-state` preparation step fails
-
-Check `Tandem.log` for the parent selector, numeric control ID, runtime class, button style, requested
-state, prior state, and resulting state. The supported control must be visible, enabled, owned by the
-directly launched tool PID, have runtime class `Button`, and use `BS_AUTOCHECKBOX`.
-
-Manual `BS_CHECKBOX`, three-state, radio, owner-drawn, custom-drawn, and framework-specific controls
-are intentionally rejected. If the requested state already matches, success is a no-op. Otherwise a
-real transition sends one bounded `BM_CLICK` and must verify the new state with `BM_GETCHECK`.
-
-## A `select-radio-button` preparation step fails
-
-Check `Tandem.log` for the parent selector, numeric control ID, runtime class, button style, prior
-selected state, resulting selected state, and failure reason. The target must be one visible, enabled
-standard `Button` owned by the directly launched tool PID and must use `BS_AUTORADIOBUTTON`.
-
-An already-selected target is successful without `BM_CLICK`. Otherwise Tandem sends one bounded
-`BM_CLICK` and requires a following `BM_GETCHECK` to report `BST_CHECKED`. Standard automatic
-radio-group behavior is responsible for clearing siblings; Tandem does not directly rewrite them.
-Manual `BS_RADIOBUTTON`, checkbox, push/default-push, owner-drawn, custom-drawn, wrong-class, hidden,
-disabled, and ambiguous targets are intentionally rejected.
-
-## A `set-edit-text` preparation step fails
-
-Check `Tandem.log` for the parent selector, numeric control ID, runtime class, style rejection, UTF-16
-lengths, and failure reason. The target must be one visible, enabled standard `Edit` owned by the
-directly launched tool PID. `ES_MULTILINE`, `ES_PASSWORD`, `ES_READONLY`, `ES_UPPERCASE`,
-`ES_LOWERCASE`, and `ES_OEMCONVERT` are intentionally rejected.
-
-An already-correct value is successful without `WM_SETTEXT`. A real change sends one bounded
-`WM_SETTEXT` and then requires an exact read-back. Empty text is supported; configured text over
-4,096 UTF-16 units or containing NUL, carriage return, or line feed is rejected. Preparation and
-result logs report text lengths rather than the actual configured or existing text. RichEdit,
-custom-drawn/framework controls, descendant-process UIs, focus/activation, synthesized input, the
-clipboard, and follow-up Enter/Tab input remain outside this action's scope.
+For `set-edit-text`, multiline, password, read only, case transforming, and OEM transforming controls are also rejected. Configured text may not exceed 4,096 UTF-16 units or contain NUL, carriage return, or line feed.
 
 ## A required setup utility stops the session
 
@@ -145,80 +71,47 @@ before_game_wait = "tool-exit"
 required = true
 ```
 
-any nonzero utility exit prevents game launch. Check the logged exit code and run the utility by
-itself to determine why it failed.
-
-Use `required = false` only when the game can still run correctly without that utility.
+any nonzero exit code prevents game launch. Check the logged exit code and test the utility by itself.
 
 ## The confirmation dialog is not visible or usable
 
-The dialog appears before the game starts and is a standard Windows dialog.
+The dialog appears before game launch.
 
-Try:
-
-1. Confirm the tool uses `launch = "before-game"`.
-2. Confirm `before_game_wait = "user-confirmation"`.
-3. Check whether another mapped window is covering the dialog.
-4. Test touch input directly.
-5. Review the container's controller-to-pointer or keyboard mapping for controller use.
-
-The dialog is not intended to remain present after the game launches.
+Confirm that the tool uses `launch = "before-game"` and `before_game_wait = "user-confirmation"`. Check whether another mapped window covers the dialog. Touch and controller behavior depend on the compatibility environment's normal input mapping.
 
 ## The trainer disappears behind the game
 
-This can be normal. A fullscreen game may cover the trainer through normal window ordering. Native
-rendering or direct scanout may bypass secondary X-server windows entirely.
-
-Complete trainer setup before selecting **OK**. Do not depend on the trainer remaining visible over
-the game.
+This can be normal. Fullscreen or native rendering modes may cover secondary Windows windows. Complete trainer setup before confirming game launch.
 
 ## A delayed tool did not launch
 
-Tandem skips delayed after-game tools when the game exits before the delay completes. This prevents
-a tool from appearing after the game session has already ended.
+Tandem skips a delayed after game tool if the game exits before the delay finishes.
 
-Check whether the game exited early or spawned a replacement process that Tandem was not configured
-to supervise.
+Also check whether the configured game launches a replacement process and exits immediately.
 
 ## A tool remains open after the game exits
 
-Check:
+Confirm:
 
 ```toml
 close_when_game_exits = true
 ```
 
-Tandem terminates the direct process it launched. A tool may create another process and then exit;
-that descendant is outside the current cleanup boundary.
-
-Whenever possible, point Tandem directly at the persistent tool process rather than a short-lived
-launcher.
+Tandem terminates the direct process it started. A separate descendant process created by a launcher or tool is outside the current cleanup guarantee.
 
 ## A BAT or CMD entry is rejected
 
-Tandem supports BAT and CMD entries through a fixed `cmd.exe` invocation. It rejects unsafe command
-text, including shell operators, expansion characters, embedded quotes, and control characters.
+Tandem accepts BAT and CMD files through a fixed `cmd.exe` invocation and rejects unsafe command text such as shell operators, expansion characters, embedded quotes, and control characters.
 
-Do not work around this with arbitrary shell syntax. Use a trusted script file with simple,
-validated arguments, or replace the workflow with a direct executable.
+Use a trusted script file with simple validated arguments instead of arbitrary shell syntax.
 
-## The container closes even though the guardian is running
+## The container closes while the game should still run
 
-Tandem can keep its guardian process alive while the configured game runs. It cannot prevent a
-compatibility environment from terminating the entire Wine session or container.
+Tandem can remain active while the configured game process runs, but it cannot prevent a compatibility environment from terminating the entire Wine session or container.
 
-Check container-level shutdown settings and whether the game launches a different replacement
-process.
+Check whether the game launches a replacement process and review the container's shutdown behavior.
 
 ## `Tandem.log` is missing
-
-Possible causes:
-
-- the log parent directory does not exist;
-- the configured log path is invalid;
-- the log resolves outside the portable folder;
-- the log overlaps another configured file; or
-- Tandem failed before opening the log.
 
 Return to the default while testing:
 
@@ -227,17 +120,19 @@ Return to the default while testing:
 log_file = "Tandem.log"
 ```
 
+Confirm the log parent directory exists and the path does not resolve outside the allowed folder or overlap another configured file.
+
 ## Reporting a problem
 
 Include:
 
 - Tandem release or commit;
 - operating system or Android version;
-- GameNative, Winlator, or Wine version;
+- GameNative, Winlator, or Wine version when applicable;
 - device model when applicable;
 - game and tool names;
-- a sanitized `Tandem.toml`;
-- the relevant `Tandem.log`; and
-- exact reproduction steps.
+- exact reproduction steps;
+- a sanitized `Tandem.toml`; and
+- the relevant part of `Tandem.log`.
 
-Do not upload credentials, copyrighted game files, or proprietary third-party executables.
+Remove credentials, unnecessary personal paths, account information, and unrelated log content before sharing. Do not upload copyrighted game files or proprietary third party executables.
