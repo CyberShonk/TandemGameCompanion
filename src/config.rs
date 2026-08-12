@@ -191,38 +191,33 @@ pub enum PreparationStep {
         timeout_ms: u64,
     },
     WaitForControl {
-        window_matcher: WindowTitleMatcher,
-        control_selector: ControlSelector,
-        timeout_ms: u64,
+        target: ControlPreparationTarget,
     },
     SelectComboBoxIndex {
-        window_matcher: WindowTitleMatcher,
-        control_selector: ControlSelector,
+        target: ControlPreparationTarget,
         selected_index: u32,
-        timeout_ms: u64,
     },
     InvokeButton {
-        window_matcher: WindowTitleMatcher,
-        control_selector: ControlSelector,
-        timeout_ms: u64,
+        target: ControlPreparationTarget,
     },
     SetCheckboxState {
-        window_matcher: WindowTitleMatcher,
-        control_selector: ControlSelector,
+        target: ControlPreparationTarget,
         checked: bool,
-        timeout_ms: u64,
     },
     SelectRadioButton {
-        window_matcher: WindowTitleMatcher,
-        control_selector: ControlSelector,
-        timeout_ms: u64,
+        target: ControlPreparationTarget,
     },
     SetEditText {
-        window_matcher: WindowTitleMatcher,
-        control_selector: ControlSelector,
+        target: ControlPreparationTarget,
         text: String,
-        timeout_ms: u64,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ControlPreparationTarget {
+    pub window_matcher: WindowTitleMatcher,
+    pub control_selector: ControlSelector,
+    pub timeout_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -288,71 +283,47 @@ impl PreparationStep {
                 matcher.description(),
                 timeout_ms
             ),
-            Self::WaitForControl {
-                window_matcher,
-                control_selector,
-                timeout_ms,
-            } => format!(
+            Self::WaitForControl { target } => format!(
                 "wait-for-control (window {}; {}; visible and enabled; timeout={}ms)",
-                window_matcher.description(),
-                control_selector.description(),
-                timeout_ms
+                target.window_matcher.description(),
+                target.control_selector.description(),
+                target.timeout_ms
             ),
             Self::SelectComboBoxIndex {
-                window_matcher,
-                control_selector,
+                target,
                 selected_index,
-                timeout_ms,
             } => format!(
                 "select-combo-box-index (window {}; {}; runtime class equals \"ComboBox\"; selected index {}; visible and enabled; timeout={}ms)",
-                window_matcher.description(),
-                control_selector.description(),
+                target.window_matcher.description(),
+                target.control_selector.description(),
                 selected_index,
-                timeout_ms
+                target.timeout_ms
             ),
-            Self::InvokeButton {
-                window_matcher,
-                control_selector,
-                timeout_ms,
-            } => format!(
+            Self::InvokeButton { target } => format!(
                 "invoke-button (window {}; {}; runtime class equals \"Button\"; standard push-button style; visible and enabled; timeout={}ms)",
-                window_matcher.description(),
-                control_selector.description(),
-                timeout_ms
+                target.window_matcher.description(),
+                target.control_selector.description(),
+                target.timeout_ms
             ),
-            Self::SetCheckboxState {
-                window_matcher,
-                control_selector,
-                checked,
-                timeout_ms,
-            } => format!(
+            Self::SetCheckboxState { target, checked } => format!(
                 "set-checkbox-state (window {}; {}; runtime class equals \"Button\"; BS_AUTOCHECKBOX; checked={}; visible and enabled; timeout={}ms)",
-                window_matcher.description(),
-                control_selector.description(),
+                target.window_matcher.description(),
+                target.control_selector.description(),
                 checked,
-                timeout_ms
+                target.timeout_ms
             ),
-            Self::SelectRadioButton {
-                window_matcher,
-                control_selector,
-                timeout_ms,
-            } => format!(
+            Self::SelectRadioButton { target } => format!(
                 "select-radio-button (window {}; {}; runtime class equals \"Button\"; BS_AUTORADIOBUTTON; visible and enabled; timeout={}ms)",
-                window_matcher.description(),
-                control_selector.description(),
-                timeout_ms
+                target.window_matcher.description(),
+                target.control_selector.description(),
+                target.timeout_ms
             ),
-            Self::SetEditText {
-                window_matcher,
-                control_selector,
-                text,
-                timeout_ms,
-            } => format!(
+            Self::SetEditText { target, text } => format!(
                 "set-edit-text (window {}; {}; runtime class equals \"Edit\"; single-line editable control; text UTF-16 units={}; visible and enabled; timeout={}ms)",
-                window_matcher.description(),
-                control_selector.description(),
+                target.window_matcher.description(),
+                target.control_selector.description(),
                 text.encode_utf16().count(),
-                timeout_ms
+                target.timeout_ms
             ),
         }
     }
@@ -540,6 +511,17 @@ fn resolve_config(config_path: PathBuf, config: Config) -> Result<ResolvedConfig
     })
 }
 
+#[derive(Clone, Copy)]
+enum ControlPreparationTargetRule<'a> {
+    Readiness,
+    DeterministicMutation {
+        missing_control_id_message: &'a str,
+        max_control_id: u32,
+        action_name: &'a str,
+        expected_class: &'a str,
+    },
+}
+
 fn resolve_preparation_step(
     tool_name: &str,
     step_index: usize,
@@ -579,56 +561,17 @@ fn resolve_preparation_step(
             control_id,
             control_class_equals,
             timeout_ms,
-        } => {
-            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
-            let window_matcher = resolve_window_title_matcher(
-                &label,
-                "window_title_equals",
-                window_title_equals,
-                "window_title_contains",
-                window_title_contains,
-                problems,
-            );
-
-            if control_id.is_none() && control_class_equals.is_none() {
-                problems.push(format!(
-                    "{label} must define control_id, control_class_equals, or both"
-                ));
-            }
-
-            let control_id_valid = match control_id {
-                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
-                    problems.push(format!(
-                        "{label} control_id must be between 1 and {}",
-                        i32::MAX
-                    ));
-                    false
-                }
-                _ => true,
-            };
-
-            let class_equals = control_class_equals
-                .as_ref()
-                .and_then(|value| validate_control_class(&label, value, problems));
-            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
-
-            if !timeout_valid
-                || !control_id_valid
-                || !control_class_valid
-                || (control_id.is_none() && control_class_equals.is_none())
-            {
-                return None;
-            }
-
-            window_matcher.map(|window_matcher| PreparationStep::WaitForControl {
-                window_matcher,
-                control_selector: ControlSelector {
-                    id: *control_id,
-                    class_equals,
-                },
-                timeout_ms: *timeout_ms,
-            })
-        }
+        } => resolve_control_preparation_target(
+            &label,
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            *timeout_ms,
+            ControlPreparationTargetRule::Readiness,
+            problems,
+        )
+        .map(|target| PreparationStep::WaitForControl { target }),
         PreparationStepConfig::SelectComboBoxIndex {
             window_title_equals,
             window_title_contains,
@@ -637,47 +580,22 @@ fn resolve_preparation_step(
             selected_index,
             timeout_ms,
         } => {
-            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
-            let window_matcher = resolve_window_title_matcher(
+            let target = resolve_control_preparation_target(
                 &label,
-                "window_title_equals",
                 window_title_equals,
-                "window_title_contains",
                 window_title_contains,
+                control_id,
+                control_class_equals,
+                *timeout_ms,
+                ControlPreparationTargetRule::DeterministicMutation {
+                    missing_control_id_message:
+                        "must define control_id for deterministic ComboBox parent notification",
+                    max_control_id: u16::MAX as u32,
+                    action_name: "select-combo-box-index",
+                    expected_class: "ComboBox",
+                },
                 problems,
             );
-
-            if control_id.is_none() {
-                problems.push(format!(
-                    "{label} must define control_id for deterministic ComboBox parent notification"
-                ));
-            }
-
-            let control_id_valid = match control_id {
-                Some(id) if !(1..=u16::MAX as u32).contains(id) => {
-                    problems.push(format!(
-                        "{label} control_id must be between 1 and {} for select-combo-box-index",
-                        u16::MAX
-                    ));
-                    false
-                }
-                Some(_) => true,
-                None => false,
-            };
-
-            let class_equals = control_class_equals
-                .as_ref()
-                .and_then(|value| validate_control_class(&label, value, problems));
-            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
-            let supported_class = match class_equals.as_deref() {
-                Some("ComboBox") | None => true,
-                Some(_) => {
-                    problems.push(format!(
-                        "{label} control_class_equals must be exactly \"ComboBox\" for select-combo-box-index"
-                    ));
-                    false
-                }
-            };
 
             let selected_index = match selected_index {
                 Some(index) if (0..=MAX_COMBO_BOX_INDEX).contains(index) => Some(*index as u32),
@@ -693,28 +611,11 @@ fn resolve_preparation_step(
                 }
             };
 
-            if !timeout_valid
-                || !control_id_valid
-                || !control_class_valid
-                || !supported_class
-                || selected_index.is_none()
-                || control_id.is_none()
-            {
-                return None;
-            }
-
-            match (window_matcher, selected_index) {
-                (Some(window_matcher), Some(selected_index)) => {
-                    Some(PreparationStep::SelectComboBoxIndex {
-                        window_matcher,
-                        control_selector: ControlSelector {
-                            id: *control_id,
-                            class_equals,
-                        },
-                        selected_index,
-                        timeout_ms: *timeout_ms,
-                    })
-                }
+            match (target, selected_index) {
+                (Some(target), Some(selected_index)) => Some(PreparationStep::SelectComboBoxIndex {
+                    target,
+                    selected_index,
+                }),
                 _ => None,
             }
         }
@@ -724,62 +625,23 @@ fn resolve_preparation_step(
             control_id,
             control_class_equals,
             timeout_ms,
-        } => {
-            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
-            let window_matcher = resolve_window_title_matcher(
-                &label,
-                "window_title_equals",
-                window_title_equals,
-                "window_title_contains",
-                window_title_contains,
-                problems,
-            );
-            if control_id.is_none() {
-                problems.push(format!(
-                    "{label} must define control_id for deterministic button invocation"
-                ));
-            }
-            let control_id_valid = match control_id {
-                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
-                    problems.push(format!(
-                        "{label} control_id must be between 1 and {} for invoke-button",
-                        i32::MAX
-                    ));
-                    false
-                }
-                Some(_) => true,
-                None => false,
-            };
-            let class_equals = control_class_equals
-                .as_ref()
-                .and_then(|value| validate_control_class(&label, value, problems));
-            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
-            let supported_class = match class_equals.as_deref() {
-                Some("Button") | None => true,
-                Some(_) => {
-                    problems.push(format!(
-                        "{label} control_class_equals must be exactly \"Button\" for invoke-button"
-                    ));
-                    false
-                }
-            };
-            if !timeout_valid
-                || !control_id_valid
-                || !control_class_valid
-                || !supported_class
-                || control_id.is_none()
-            {
-                return None;
-            }
-            window_matcher.map(|window_matcher| PreparationStep::InvokeButton {
-                window_matcher,
-                control_selector: ControlSelector {
-                    id: *control_id,
-                    class_equals,
-                },
-                timeout_ms: *timeout_ms,
-            })
-        }
+        } => resolve_control_preparation_target(
+            &label,
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            *timeout_ms,
+            ControlPreparationTargetRule::DeterministicMutation {
+                missing_control_id_message:
+                    "must define control_id for deterministic button invocation",
+                max_control_id: i32::MAX as u32,
+                action_name: "invoke-button",
+                expected_class: "Button",
+            },
+            problems,
+        )
+        .map(|target| PreparationStep::InvokeButton { target }),
         PreparationStepConfig::SetCheckboxState {
             window_title_equals,
             window_title_contains,
@@ -788,44 +650,22 @@ fn resolve_preparation_step(
             checked,
             timeout_ms,
         } => {
-            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
-            let window_matcher = resolve_window_title_matcher(
+            let target = resolve_control_preparation_target(
                 &label,
-                "window_title_equals",
                 window_title_equals,
-                "window_title_contains",
                 window_title_contains,
+                control_id,
+                control_class_equals,
+                *timeout_ms,
+                ControlPreparationTargetRule::DeterministicMutation {
+                    missing_control_id_message:
+                        "must define control_id for deterministic checkbox state preparation",
+                    max_control_id: i32::MAX as u32,
+                    action_name: "set-checkbox-state",
+                    expected_class: "Button",
+                },
                 problems,
             );
-            if control_id.is_none() {
-                problems.push(format!(
-                    "{label} must define control_id for deterministic checkbox state preparation"
-                ));
-            }
-            let control_id_valid = match control_id {
-                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
-                    problems.push(format!(
-                        "{label} control_id must be between 1 and {} for set-checkbox-state",
-                        i32::MAX
-                    ));
-                    false
-                }
-                Some(_) => true,
-                None => false,
-            };
-            let class_equals = control_class_equals
-                .as_ref()
-                .and_then(|value| validate_control_class(&label, value, problems));
-            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
-            let supported_class = match class_equals.as_deref() {
-                Some("Button") | None => true,
-                Some(_) => {
-                    problems.push(format!(
-                        "{label} control_class_equals must be exactly \"Button\" for set-checkbox-state"
-                    ));
-                    false
-                }
-            };
             let checked = match checked {
                 Some(value) => Some(*value),
                 None => {
@@ -833,25 +673,11 @@ fn resolve_preparation_step(
                     None
                 }
             };
-            if !timeout_valid
-                || !control_id_valid
-                || !control_class_valid
-                || !supported_class
-                || control_id.is_none()
-                || checked.is_none()
-            {
-                return None;
-            }
-            match (window_matcher, checked) {
-                (Some(window_matcher), Some(checked)) => Some(PreparationStep::SetCheckboxState {
-                    window_matcher,
-                    control_selector: ControlSelector {
-                        id: *control_id,
-                        class_equals,
-                    },
-                    checked,
-                    timeout_ms: *timeout_ms,
-                }),
+
+            match (target, checked) {
+                (Some(target), Some(checked)) => {
+                    Some(PreparationStep::SetCheckboxState { target, checked })
+                }
                 _ => None,
             }
         }
@@ -861,62 +687,23 @@ fn resolve_preparation_step(
             control_id,
             control_class_equals,
             timeout_ms,
-        } => {
-            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
-            let window_matcher = resolve_window_title_matcher(
-                &label,
-                "window_title_equals",
-                window_title_equals,
-                "window_title_contains",
-                window_title_contains,
-                problems,
-            );
-            if control_id.is_none() {
-                problems.push(format!(
-                    "{label} must define control_id for deterministic radio-button selection"
-                ));
-            }
-            let control_id_valid = match control_id {
-                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
-                    problems.push(format!(
-                        "{label} control_id must be between 1 and {} for select-radio-button",
-                        i32::MAX
-                    ));
-                    false
-                }
-                Some(_) => true,
-                None => false,
-            };
-            let class_equals = control_class_equals
-                .as_ref()
-                .and_then(|value| validate_control_class(&label, value, problems));
-            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
-            let supported_class = match class_equals.as_deref() {
-                Some("Button") | None => true,
-                Some(_) => {
-                    problems.push(format!(
-                        "{label} control_class_equals must be exactly \"Button\" for select-radio-button"
-                    ));
-                    false
-                }
-            };
-            if !timeout_valid
-                || !control_id_valid
-                || !control_class_valid
-                || !supported_class
-                || control_id.is_none()
-            {
-                return None;
-            }
-            window_matcher.map(|window_matcher| PreparationStep::SelectRadioButton {
-                window_matcher,
-                control_selector: ControlSelector {
-                    id: *control_id,
-                    class_equals,
-                },
-                timeout_ms: *timeout_ms,
-            })
-        }
+        } => resolve_control_preparation_target(
+            &label,
+            window_title_equals,
+            window_title_contains,
+            control_id,
+            control_class_equals,
+            *timeout_ms,
+            ControlPreparationTargetRule::DeterministicMutation {
+                missing_control_id_message:
+                    "must define control_id for deterministic radio-button selection",
+                max_control_id: i32::MAX as u32,
+                action_name: "select-radio-button",
+                expected_class: "Button",
+            },
+            problems,
+        )
+        .map(|target| PreparationStep::SelectRadioButton { target }),
         PreparationStepConfig::SetEditText {
             window_title_equals,
             window_title_contains,
@@ -925,44 +712,22 @@ fn resolve_preparation_step(
             text,
             timeout_ms,
         } => {
-            let timeout_valid = validate_preparation_timeout(&label, *timeout_ms, problems);
-            let window_matcher = resolve_window_title_matcher(
+            let target = resolve_control_preparation_target(
                 &label,
-                "window_title_equals",
                 window_title_equals,
-                "window_title_contains",
                 window_title_contains,
+                control_id,
+                control_class_equals,
+                *timeout_ms,
+                ControlPreparationTargetRule::DeterministicMutation {
+                    missing_control_id_message:
+                        "must define control_id for deterministic edit text preparation",
+                    max_control_id: i32::MAX as u32,
+                    action_name: "set-edit-text",
+                    expected_class: "Edit",
+                },
                 problems,
             );
-            if control_id.is_none() {
-                problems.push(format!(
-                    "{label} must define control_id for deterministic edit text preparation"
-                ));
-            }
-            let control_id_valid = match control_id {
-                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
-                    problems.push(format!(
-                        "{label} control_id must be between 1 and {} for set-edit-text",
-                        i32::MAX
-                    ));
-                    false
-                }
-                Some(_) => true,
-                None => false,
-            };
-            let class_equals = control_class_equals
-                .as_ref()
-                .and_then(|value| validate_control_class(&label, value, problems));
-            let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
-            let supported_class = match class_equals.as_deref() {
-                Some("Edit") | None => true,
-                Some(_) => {
-                    problems.push(format!(
-                        "{label} control_class_equals must be exactly \"Edit\" for set-edit-text"
-                    ));
-                    false
-                }
-            };
             let text = match text {
                 Some(value) => {
                     let utf16_units = value.encode_utf16().count();
@@ -990,29 +755,125 @@ fn resolve_preparation_step(
                     None
                 }
             };
-            if !timeout_valid
-                || !control_id_valid
-                || !control_class_valid
-                || !supported_class
-                || control_id.is_none()
-                || text.is_none()
-            {
-                return None;
-            }
-            match (window_matcher, text) {
-                (Some(window_matcher), Some(text)) => Some(PreparationStep::SetEditText {
-                    window_matcher,
-                    control_selector: ControlSelector {
-                        id: *control_id,
-                        class_equals,
-                    },
-                    text,
-                    timeout_ms: *timeout_ms,
-                }),
+
+            match (target, text) {
+                (Some(target), Some(text)) => Some(PreparationStep::SetEditText { target, text }),
                 _ => None,
             }
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn resolve_control_preparation_target(
+    label: &str,
+    window_title_equals: &Option<String>,
+    window_title_contains: &Option<String>,
+    control_id: &Option<u32>,
+    control_class_equals: &Option<String>,
+    timeout_ms: u64,
+    rule: ControlPreparationTargetRule<'_>,
+    problems: &mut Vec<String>,
+) -> Option<ControlPreparationTarget> {
+    let timeout_valid = validate_preparation_timeout(label, timeout_ms, problems);
+    let window_matcher = resolve_window_title_matcher(
+        label,
+        "window_title_equals",
+        window_title_equals,
+        "window_title_contains",
+        window_title_contains,
+        problems,
+    );
+
+    let (control_id_valid, selector_valid) = match rule {
+        ControlPreparationTargetRule::Readiness => {
+            if control_id.is_none() && control_class_equals.is_none() {
+                problems.push(format!(
+                    "{label} must define control_id, control_class_equals, or both"
+                ));
+            }
+
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=i32::MAX as u32).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {}",
+                        i32::MAX
+                    ));
+                    false
+                }
+                _ => true,
+            };
+
+            (
+                control_id_valid,
+                control_id.is_some() || control_class_equals.is_some(),
+            )
+        }
+        ControlPreparationTargetRule::DeterministicMutation {
+            missing_control_id_message,
+            max_control_id,
+            action_name,
+            ..
+        } => {
+            if control_id.is_none() {
+                problems.push(format!("{label} {missing_control_id_message}"));
+            }
+
+            let control_id_valid = match control_id {
+                Some(id) if !(1..=max_control_id).contains(id) => {
+                    problems.push(format!(
+                        "{label} control_id must be between 1 and {max_control_id} for {action_name}"
+                    ));
+                    false
+                }
+                Some(_) => true,
+                None => false,
+            };
+
+            (control_id_valid, control_id.is_some())
+        }
+    };
+
+    let class_equals = control_class_equals
+        .as_ref()
+        .and_then(|value| validate_control_class(label, value, problems));
+    let control_class_valid = control_class_equals.is_none() || class_equals.is_some();
+
+    let supported_class = match rule {
+        ControlPreparationTargetRule::Readiness => true,
+        ControlPreparationTargetRule::DeterministicMutation {
+            action_name,
+            expected_class,
+            ..
+        } => match class_equals.as_deref() {
+            Some(class_name) if class_name == expected_class => true,
+            None => true,
+            Some(_) => {
+                problems.push(format!(
+                    "{label} control_class_equals must be exactly {expected_class:?} for {action_name}"
+                ));
+                false
+            }
+        },
+    };
+
+    if !timeout_valid
+        || !control_id_valid
+        || !selector_valid
+        || !control_class_valid
+        || !supported_class
+    {
+        return None;
+    }
+
+    window_matcher.map(|window_matcher| ControlPreparationTarget {
+        window_matcher,
+        control_selector: ControlSelector {
+            id: *control_id,
+            class_equals,
+        },
+        timeout_ms,
+    })
 }
 
 fn validate_preparation_timeout(label: &str, timeout_ms: u64, problems: &mut Vec<String>) -> bool {
@@ -1441,6 +1302,7 @@ fn default_window_wait_timeout_ms() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use super::ControlPreparationTarget;
     use super::{
         BeforeGameWait, Config, ControlSelector, LaunchTiming, MAX_EDIT_TEXT_UTF16_UNITS,
         PreparationStep, PreparationStepConfig, WindowTitleMatcher, contains_cmd_metacharacters,
@@ -1816,12 +1678,14 @@ text = "60"
     #[test]
     fn control_preparation_description_is_deterministic() {
         let step = PreparationStep::WaitForControl {
-            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
-            control_selector: ControlSelector {
-                id: Some(1001),
-                class_equals: Some("ComboBox".into()),
+            target: ControlPreparationTarget {
+                window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+                control_selector: ControlSelector {
+                    id: Some(1001),
+                    class_equals: Some("ComboBox".into()),
+                },
+                timeout_ms: 10_000,
             },
-            timeout_ms: 10_000,
         };
 
         assert_eq!(
@@ -1833,13 +1697,15 @@ text = "60"
     #[test]
     fn combo_box_selection_description_is_deterministic() {
         let step = PreparationStep::SelectComboBoxIndex {
-            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
-            control_selector: ControlSelector {
-                id: Some(1001),
-                class_equals: Some("ComboBox".into()),
+            target: ControlPreparationTarget {
+                window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+                control_selector: ControlSelector {
+                    id: Some(1001),
+                    class_equals: Some("ComboBox".into()),
+                },
+                timeout_ms: 10_000,
             },
             selected_index: 2,
-            timeout_ms: 10_000,
         };
 
         assert_eq!(
@@ -1851,12 +1717,14 @@ text = "60"
     #[test]
     fn button_invocation_description_is_deterministic() {
         let step = PreparationStep::InvokeButton {
-            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
-            control_selector: ControlSelector {
-                id: Some(1002),
-                class_equals: Some("Button".into()),
+            target: ControlPreparationTarget {
+                window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+                control_selector: ControlSelector {
+                    id: Some(1002),
+                    class_equals: Some("Button".into()),
+                },
+                timeout_ms: 10_000,
             },
-            timeout_ms: 10_000,
         };
         assert_eq!(
             step.description(),
@@ -1867,13 +1735,15 @@ text = "60"
     #[test]
     fn checkbox_state_description_is_deterministic() {
         let step = PreparationStep::SetCheckboxState {
-            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
-            control_selector: ControlSelector {
-                id: Some(1003),
-                class_equals: Some("Button".into()),
+            target: ControlPreparationTarget {
+                window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+                control_selector: ControlSelector {
+                    id: Some(1003),
+                    class_equals: Some("Button".into()),
+                },
+                timeout_ms: 10_000,
             },
             checked: true,
-            timeout_ms: 10_000,
         };
         assert_eq!(
             step.description(),
@@ -1883,12 +1753,14 @@ text = "60"
     #[test]
     fn radio_button_selection_description_is_deterministic() {
         let step = PreparationStep::SelectRadioButton {
-            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
-            control_selector: ControlSelector {
-                id: Some(5002),
-                class_equals: Some("Button".into()),
+            target: ControlPreparationTarget {
+                window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+                control_selector: ControlSelector {
+                    id: Some(5002),
+                    class_equals: Some("Button".into()),
+                },
+                timeout_ms: 10_000,
             },
-            timeout_ms: 10_000,
         };
         assert_eq!(
             step.description(),
@@ -1898,13 +1770,15 @@ text = "60"
     #[test]
     fn edit_text_description_is_deterministic_and_redacts_content() {
         let step = PreparationStep::SetEditText {
-            window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
-            control_selector: ControlSelector {
-                id: Some(4001),
-                class_equals: Some("Edit".into()),
+            target: ControlPreparationTarget {
+                window_matcher: WindowTitleMatcher::Contains("Trainer".into()),
+                control_selector: ControlSelector {
+                    id: Some(4001),
+                    class_equals: Some("Edit".into()),
+                },
+                timeout_ms: 10_000,
             },
             text: "secret-value".into(),
-            timeout_ms: 10_000,
         };
         let description = step.description();
         assert_eq!(

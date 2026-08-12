@@ -174,77 +174,53 @@ pub fn execute(
             matcher,
             timeout_ms,
         } => wait_for_window(tool_name, child, matcher, *timeout_ms),
-        PreparationStep::WaitForControl {
-            window_matcher,
-            control_selector,
-            timeout_ms,
-        } => wait_for_control(
+        PreparationStep::WaitForControl { target } => wait_for_control(
             tool_name,
             child,
-            window_matcher,
-            control_selector,
-            *timeout_ms,
+            &target.window_matcher,
+            &target.control_selector,
+            target.timeout_ms,
         ),
         PreparationStep::SelectComboBoxIndex {
-            window_matcher,
-            control_selector,
+            target,
             selected_index,
-            timeout_ms,
         } => select_combo_box_index(
             tool_name,
             child,
-            window_matcher,
-            control_selector,
+            &target.window_matcher,
+            &target.control_selector,
             *selected_index,
-            *timeout_ms,
+            target.timeout_ms,
         ),
-        PreparationStep::InvokeButton {
-            window_matcher,
-            control_selector,
-            timeout_ms,
-        } => invoke_button(
+        PreparationStep::InvokeButton { target } => invoke_button(
             tool_name,
             child,
-            window_matcher,
-            control_selector,
-            *timeout_ms,
+            &target.window_matcher,
+            &target.control_selector,
+            target.timeout_ms,
         ),
-        PreparationStep::SetCheckboxState {
-            window_matcher,
-            control_selector,
-            checked,
-            timeout_ms,
-        } => set_checkbox_state(
+        PreparationStep::SetCheckboxState { target, checked } => set_checkbox_state(
             tool_name,
             child,
-            window_matcher,
-            control_selector,
+            &target.window_matcher,
+            &target.control_selector,
             *checked,
-            *timeout_ms,
+            target.timeout_ms,
         ),
-        PreparationStep::SelectRadioButton {
-            window_matcher,
-            control_selector,
-            timeout_ms,
-        } => select_radio_button(
+        PreparationStep::SelectRadioButton { target } => select_radio_button(
             tool_name,
             child,
-            window_matcher,
-            control_selector,
-            *timeout_ms,
+            &target.window_matcher,
+            &target.control_selector,
+            target.timeout_ms,
         ),
-        PreparationStep::SetEditText {
-            window_matcher,
-            control_selector,
-            text,
-            timeout_ms,
-        } => set_edit_text(
+        PreparationStep::SetEditText { target, text } => set_edit_text(
             tool_name,
             child,
-            window_matcher,
-            control_selector,
+            &target.window_matcher,
+            &target.control_selector,
             text,
-            *timeout_ms,
+            target.timeout_ms,
         ),
     }
 }
