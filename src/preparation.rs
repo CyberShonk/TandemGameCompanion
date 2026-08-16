@@ -280,36 +280,29 @@ fn wait_for_control(
     )
 }
 
-fn select_combo_box_index(
+enum MutationAttempt<T> {
+    Pending { reason: String },
+    Complete(T),
+}
+
+fn poll_mutating_action<T>(
     tool_name: &str,
     child: &mut Child,
-    window_matcher: &WindowTitleMatcher,
-    control_selector: &ControlSelector,
-    requested_index: u32,
     timeout_ms: u64,
-) -> Result<PreparationOutcome, AppError> {
-    let pid = child.id();
+    exit_condition: &str,
+    mut timeout_error: impl FnMut(&str) -> AppError,
+    mut attempt: impl FnMut(u32) -> Result<MutationAttempt<T>, AppError>,
+) -> Result<T, AppError> {
     let timeout = Duration::from_millis(timeout_ms);
     let started = Instant::now();
-    let selector = format!(
-        "window whose {} and descendant whose {}",
-        window_matcher.description(),
-        control_selector.description()
-    );
     let mut last_pending_reason = "matching parent window has not appeared".to_owned();
 
     loop {
-        detect_tool_exit(
-            tool_name,
-            child,
-            "the requested ComboBox index was selected and verified",
-        )?;
+        detect_tool_exit(tool_name, child, exit_condition)?;
 
         let elapsed = started.elapsed();
         if elapsed >= timeout {
-            return Err(AppError::runtime(format!(
-                "timed out after {timeout_ms} ms selecting ComboBox index for companion tool {tool_name}: selector [{selector}], requested index {requested_index}, failure reason: {last_pending_reason}"
-            )));
+            return Err(timeout_error(&last_pending_reason));
         }
 
         let remaining = timeout - elapsed;
@@ -317,30 +310,9 @@ fn select_combo_box_index(
             u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
                 .unwrap_or(u32::MAX);
 
-        match platform::select_combo_box_index(
-            pid,
-            window_matcher,
-            control_selector,
-            requested_index,
-            message_timeout_ms,
-        )
-        .map_err(|error| {
-            AppError::runtime(format!(
-                "could not select ComboBox index for companion tool {tool_name}: selector [{selector}], requested index {requested_index}, failure reason: {error}"
-            ))
-        })? {
-            ComboBoxSelectionStatus::Pending { reason } => last_pending_reason = reason,
-            ComboBoxSelectionStatus::Complete(result) => {
-                return Ok(PreparationOutcome::ComboBoxIndexSelected {
-                    window_title: result.window_title,
-                    control_id: result.control_id,
-                    class_name: result.class_name,
-                    requested_index: result.requested_index,
-                    prior_index: result.prior_index,
-                    resulting_index: result.resulting_index,
-                    notification_sent: result.notification_sent,
-                });
-            }
+        match attempt(message_timeout_ms)? {
+            MutationAttempt::Pending { reason } => last_pending_reason = reason,
+            MutationAttempt::Complete(result) => return Ok(result),
         }
 
         let elapsed = started.elapsed();
@@ -351,6 +323,64 @@ fn select_combo_box_index(
     }
 }
 
+fn select_combo_box_index(
+    tool_name: &str,
+    child: &mut Child,
+    window_matcher: &WindowTitleMatcher,
+    control_selector: &ControlSelector,
+    requested_index: u32,
+    timeout_ms: u64,
+) -> Result<PreparationOutcome, AppError> {
+    let pid = child.id();
+    let selector = format!(
+        "window whose {} and descendant whose {}",
+        window_matcher.description(),
+        control_selector.description()
+    );
+    let result = poll_mutating_action(
+        tool_name,
+        child,
+        timeout_ms,
+        "the requested ComboBox index was selected and verified",
+        |last_pending_reason| {
+            AppError::runtime(format!(
+                "timed out after {timeout_ms} ms selecting ComboBox index for companion tool {tool_name}: selector [{selector}], requested index {requested_index}, failure reason: {last_pending_reason}"
+            ))
+        },
+        |message_timeout_ms| {
+            match platform::select_combo_box_index(
+                pid,
+                window_matcher,
+                control_selector,
+                requested_index,
+                message_timeout_ms,
+            )
+            .map_err(|error| {
+                AppError::runtime(format!(
+                    "could not select ComboBox index for companion tool {tool_name}: selector [{selector}], requested index {requested_index}, failure reason: {error}"
+                ))
+            })? {
+                ComboBoxSelectionStatus::Pending { reason } => {
+                    Ok(MutationAttempt::Pending { reason })
+                }
+                ComboBoxSelectionStatus::Complete(result) => {
+                    Ok(MutationAttempt::Complete(result))
+                }
+            }
+        },
+    )?;
+
+    Ok(PreparationOutcome::ComboBoxIndexSelected {
+        window_title: result.window_title,
+        control_id: result.control_id,
+        class_name: result.class_name,
+        requested_index: result.requested_index,
+        prior_index: result.prior_index,
+        resulting_index: result.resulting_index,
+        notification_sent: result.notification_sent,
+    })
+}
+
 fn invoke_button(
     tool_name: &str,
     child: &mut Child,
@@ -359,53 +389,47 @@ fn invoke_button(
     timeout_ms: u64,
 ) -> Result<PreparationOutcome, AppError> {
     let pid = child.id();
-    let timeout = Duration::from_millis(timeout_ms);
-    let started = Instant::now();
     let selector = format!(
         "window whose {} and descendant whose {}",
         window_matcher.description(),
         control_selector.description()
     );
-    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
-    loop {
-        detect_tool_exit(tool_name, child, "the requested button was invoked")?;
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            return Err(AppError::runtime(format!(
-                "timed out after {timeout_ms} ms invoking button for companion tool {tool_name}: selector [{selector}], failure reason: {last_pending_reason}"
-            )));
-        }
-        let remaining = timeout - elapsed;
-        let message_timeout_ms =
-            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
-                .unwrap_or(u32::MAX);
-        match platform::invoke_button(
-            pid,
-            window_matcher,
-            control_selector,
-            message_timeout_ms,
-        )
-        .map_err(|error| {
+    let result = poll_mutating_action(
+        tool_name,
+        child,
+        timeout_ms,
+        "the requested button was invoked",
+        |last_pending_reason| {
             AppError::runtime(format!(
-                "could not invoke button for companion tool {tool_name}: selector [{selector}], failure reason: {error}"
+                "timed out after {timeout_ms} ms invoking button for companion tool {tool_name}: selector [{selector}], failure reason: {last_pending_reason}"
             ))
-        })? {
-            ButtonInvocationStatus::Pending { reason } => last_pending_reason = reason,
-            ButtonInvocationStatus::Complete(result) => {
-                return Ok(PreparationOutcome::ButtonInvoked {
-                    window_title: result.window_title,
-                    control_id: result.control_id,
-                    class_name: result.class_name,
-                    button_style: result.button_style,
-                });
+        },
+        |message_timeout_ms| {
+            match platform::invoke_button(
+                pid,
+                window_matcher,
+                control_selector,
+                message_timeout_ms,
+            )
+            .map_err(|error| {
+                AppError::runtime(format!(
+                    "could not invoke button for companion tool {tool_name}: selector [{selector}], failure reason: {error}"
+                ))
+            })? {
+                ButtonInvocationStatus::Pending { reason } => {
+                    Ok(MutationAttempt::Pending { reason })
+                }
+                ButtonInvocationStatus::Complete(result) => Ok(MutationAttempt::Complete(result)),
             }
-        }
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            continue;
-        }
-        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
-    }
+        },
+    )?;
+
+    Ok(PreparationOutcome::ButtonInvoked {
+        window_title: result.window_title,
+        control_id: result.control_id,
+        class_name: result.class_name,
+        button_style: result.button_style,
+    })
 }
 
 fn set_checkbox_state(
@@ -417,63 +441,54 @@ fn set_checkbox_state(
     timeout_ms: u64,
 ) -> Result<PreparationOutcome, AppError> {
     let pid = child.id();
-    let timeout = Duration::from_millis(timeout_ms);
-    let started = Instant::now();
     let selector = format!(
         "window whose {} and descendant whose {}",
         window_matcher.description(),
         control_selector.description()
     );
-    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
-    loop {
-        detect_tool_exit(
-            tool_name,
-            child,
-            "the requested checkbox state was set and verified",
-        )?;
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            return Err(AppError::runtime(format!(
-                "timed out after {timeout_ms} ms setting checkbox state for companion tool {tool_name}: selector [{selector}], requested checked={requested_checked}, failure reason: {last_pending_reason}"
-            )));
-        }
-        let remaining = timeout - elapsed;
-        let message_timeout_ms =
-            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
-                .unwrap_or(u32::MAX);
-        match platform::set_checkbox_state(
-            pid,
-            window_matcher,
-            control_selector,
-            requested_checked,
-            message_timeout_ms,
-        )
-        .map_err(|error| {
+    let result = poll_mutating_action(
+        tool_name,
+        child,
+        timeout_ms,
+        "the requested checkbox state was set and verified",
+        |last_pending_reason| {
             AppError::runtime(format!(
-                "could not set checkbox state for companion tool {tool_name}: selector [{selector}], requested checked={requested_checked}, failure reason: {error}"
+                "timed out after {timeout_ms} ms setting checkbox state for companion tool {tool_name}: selector [{selector}], requested checked={requested_checked}, failure reason: {last_pending_reason}"
             ))
-        })? {
-            CheckboxStateStatus::Pending { reason } => last_pending_reason = reason,
-            CheckboxStateStatus::Complete(result) => {
-                return Ok(PreparationOutcome::CheckboxStateSet {
-                    window_title: result.window_title,
-                    control_id: result.control_id,
-                    class_name: result.class_name,
-                    button_style: result.button_style,
-                    requested_checked: result.requested_checked,
-                    prior_checked: result.prior_checked,
-                    resulting_checked: result.resulting_checked,
-                    clicked: result.clicked,
-                });
+        },
+        |message_timeout_ms| {
+            match platform::set_checkbox_state(
+                pid,
+                window_matcher,
+                control_selector,
+                requested_checked,
+                message_timeout_ms,
+            )
+            .map_err(|error| {
+                AppError::runtime(format!(
+                    "could not set checkbox state for companion tool {tool_name}: selector [{selector}], requested checked={requested_checked}, failure reason: {error}"
+                ))
+            })? {
+                CheckboxStateStatus::Pending { reason } => {
+                    Ok(MutationAttempt::Pending { reason })
+                }
+                CheckboxStateStatus::Complete(result) => Ok(MutationAttempt::Complete(result)),
             }
-        }
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            continue;
-        }
-        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
-    }
+        },
+    )?;
+
+    Ok(PreparationOutcome::CheckboxStateSet {
+        window_title: result.window_title,
+        control_id: result.control_id,
+        class_name: result.class_name,
+        button_style: result.button_style,
+        requested_checked: result.requested_checked,
+        prior_checked: result.prior_checked,
+        resulting_checked: result.resulting_checked,
+        clicked: result.clicked,
+    })
 }
+
 fn select_radio_button(
     tool_name: &str,
     child: &mut Child,
@@ -482,61 +497,54 @@ fn select_radio_button(
     timeout_ms: u64,
 ) -> Result<PreparationOutcome, AppError> {
     let pid = child.id();
-    let timeout = Duration::from_millis(timeout_ms);
-    let started = Instant::now();
     let selector = format!(
         "window whose {} and descendant whose {}",
         window_matcher.description(),
         control_selector.description()
     );
-    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
-    loop {
-        detect_tool_exit(
-            tool_name,
-            child,
-            "the requested radio button was selected and verified",
-        )?;
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            return Err(AppError::runtime(format!(
-                "timed out after {timeout_ms} ms selecting radio button for companion tool {tool_name}: selector [{selector}], failure reason: {last_pending_reason}"
-            )));
-        }
-        let remaining = timeout - elapsed;
-        let message_timeout_ms =
-            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
-                .unwrap_or(u32::MAX);
-        match platform::select_radio_button(
-            pid,
-            window_matcher,
-            control_selector,
-            message_timeout_ms,
-        )
-        .map_err(|error| {
+    let result = poll_mutating_action(
+        tool_name,
+        child,
+        timeout_ms,
+        "the requested radio button was selected and verified",
+        |last_pending_reason| {
             AppError::runtime(format!(
-                "could not select radio button for companion tool {tool_name}: selector [{selector}], failure reason: {error}"
+                "timed out after {timeout_ms} ms selecting radio button for companion tool {tool_name}: selector [{selector}], failure reason: {last_pending_reason}"
             ))
-        })? {
-            RadioButtonSelectionStatus::Pending { reason } => last_pending_reason = reason,
-            RadioButtonSelectionStatus::Complete(result) => {
-                return Ok(PreparationOutcome::RadioButtonSelected {
-                    window_title: result.window_title,
-                    control_id: result.control_id,
-                    class_name: result.class_name,
-                    button_style: result.button_style,
-                    prior_selected: result.prior_selected,
-                    resulting_selected: result.resulting_selected,
-                    clicked: result.clicked,
-                });
+        },
+        |message_timeout_ms| {
+            match platform::select_radio_button(
+                pid,
+                window_matcher,
+                control_selector,
+                message_timeout_ms,
+            )
+            .map_err(|error| {
+                AppError::runtime(format!(
+                    "could not select radio button for companion tool {tool_name}: selector [{selector}], failure reason: {error}"
+                ))
+            })? {
+                RadioButtonSelectionStatus::Pending { reason } => {
+                    Ok(MutationAttempt::Pending { reason })
+                }
+                RadioButtonSelectionStatus::Complete(result) => {
+                    Ok(MutationAttempt::Complete(result))
+                }
             }
-        }
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            continue;
-        }
-        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
-    }
+        },
+    )?;
+
+    Ok(PreparationOutcome::RadioButtonSelected {
+        window_title: result.window_title,
+        control_id: result.control_id,
+        class_name: result.class_name,
+        button_style: result.button_style,
+        prior_selected: result.prior_selected,
+        resulting_selected: result.resulting_selected,
+        clicked: result.clicked,
+    })
 }
+
 fn set_edit_text(
     tool_name: &str,
     child: &mut Child,
@@ -546,62 +554,50 @@ fn set_edit_text(
     timeout_ms: u64,
 ) -> Result<PreparationOutcome, AppError> {
     let pid = child.id();
-    let timeout = Duration::from_millis(timeout_ms);
-    let started = Instant::now();
     let selector = format!(
         "window whose {} and descendant whose {}",
         window_matcher.description(),
         control_selector.description()
     );
     let requested_utf16_units = requested_text.encode_utf16().count();
-    let mut last_pending_reason = "matching parent window has not appeared".to_owned();
-    loop {
-        detect_tool_exit(
-            tool_name,
-            child,
-            "the requested edit text was set and verified",
-        )?;
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            return Err(AppError::runtime(format!(
-                "timed out after {timeout_ms} ms setting Edit text for companion tool {tool_name}: selector [{selector}], requested UTF-16 units {requested_utf16_units}, failure reason: {last_pending_reason}"
-            )));
-        }
-        let remaining = timeout - elapsed;
-        let message_timeout_ms =
-            u32::try_from(remaining.as_millis().max(1).min(u128::from(u32::MAX)))
-                .unwrap_or(u32::MAX);
-        match platform::set_edit_text(
-            pid,
-            window_matcher,
-            control_selector,
-            requested_text,
-            message_timeout_ms,
-        )
-        .map_err(|error| {
+    let result = poll_mutating_action(
+        tool_name,
+        child,
+        timeout_ms,
+        "the requested edit text was set and verified",
+        |last_pending_reason| {
             AppError::runtime(format!(
-                "could not set Edit text for companion tool {tool_name}: selector [{selector}], requested UTF-16 units {requested_utf16_units}, failure reason: {error}"
+                "timed out after {timeout_ms} ms setting Edit text for companion tool {tool_name}: selector [{selector}], requested UTF-16 units {requested_utf16_units}, failure reason: {last_pending_reason}"
             ))
-        })? {
-            EditTextStatus::Pending { reason } => last_pending_reason = reason,
-            EditTextStatus::Complete(result) => {
-                return Ok(PreparationOutcome::EditTextSet {
-                    window_title: result.window_title,
-                    control_id: result.control_id,
-                    class_name: result.class_name,
-                    requested_utf16_units: result.requested_utf16_units,
-                    prior_utf16_units: result.prior_utf16_units,
-                    resulting_utf16_units: result.resulting_utf16_units,
-                    changed: result.changed,
-                });
+        },
+        |message_timeout_ms| {
+            match platform::set_edit_text(
+                pid,
+                window_matcher,
+                control_selector,
+                requested_text,
+                message_timeout_ms,
+            )
+            .map_err(|error| {
+                AppError::runtime(format!(
+                    "could not set Edit text for companion tool {tool_name}: selector [{selector}], requested UTF-16 units {requested_utf16_units}, failure reason: {error}"
+                ))
+            })? {
+                EditTextStatus::Pending { reason } => Ok(MutationAttempt::Pending { reason }),
+                EditTextStatus::Complete(result) => Ok(MutationAttempt::Complete(result)),
             }
-        }
-        let elapsed = started.elapsed();
-        if elapsed >= timeout {
-            continue;
-        }
-        thread::sleep(WINDOW_POLL_INTERVAL.min(timeout - elapsed));
-    }
+        },
+    )?;
+
+    Ok(PreparationOutcome::EditTextSet {
+        window_title: result.window_title,
+        control_id: result.control_id,
+        class_name: result.class_name,
+        requested_utf16_units: result.requested_utf16_units,
+        prior_utf16_units: result.prior_utf16_units,
+        resulting_utf16_units: result.resulting_utf16_units,
+        changed: result.changed,
+    })
 }
 
 fn wait_until_ready(
